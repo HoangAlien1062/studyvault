@@ -1,0 +1,70 @@
+import { FormEvent, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+export default function Header() {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (query.trim()) {
+      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+    } else {
+      navigate("/search");
+    }
+  }
+
+  return (
+    <header className="sticky top-0 z-30 flex items-center gap-4 h-16 px-4 sm:px-6 lg:px-8 border-b border-ink-600/70 bg-ink-900/90 backdrop-blur">
+      <form onSubmit={handleSubmit} className="hidden sm:flex flex-1 max-w-xl">
+        <label className="relative w-full">
+          <span className="sr-only">Tìm kiếm</span>
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ash-500">
+            🔍
+          </span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder="Tìm kiếm môn học, giáo viên, chương hoặc bài học..."
+            className={`w-full rounded-xl bg-ink-800 border pl-10 pr-4 py-2.5 text-sm text-ash-200 placeholder:text-ash-500 outline-none transition-all duration-200 ${
+              focused ? "border-cue/60 shadow-[0_0_0_3px_rgba(242,184,75,0.12)]" : "border-ink-600"
+            }`}
+          />
+        </label>
+      </form>
+
+      <button
+        onClick={() => navigate("/search")}
+        aria-label="Tìm kiếm"
+        className="sm:hidden flex h-10 w-10 items-center justify-center rounded-lg text-ash-300 hover:bg-ink-700/60 transition-colors"
+      >
+        🔍
+      </button>
+
+      <div className="flex-1 sm:hidden" />
+
+      <div className="flex items-center gap-3 shrink-0">
+        <button
+          aria-label="Thông báo"
+          className="relative flex h-10 w-10 items-center justify-center rounded-lg text-ash-300 hover:bg-ink-700/60 transition-colors"
+        >
+          🔔
+          <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-cue" />
+        </button>
+        <div className="flex items-center gap-2.5 pl-2 border-l border-ink-600/70">
+          <div className="h-9 w-9 rounded-full bg-ink-700 border border-ink-600 flex items-center justify-center text-sm">
+            👤
+          </div>
+          <div className="hidden md:block leading-tight">
+            <p className="text-sm font-medium text-ash-200">Học sinh</p>
+            <p className="text-xs text-ash-500">Lớp 12</p>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
