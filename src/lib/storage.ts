@@ -6,6 +6,8 @@ const KEYS = {
   favorites: "studyvault.favorites",
   history: "studyvault.history",
   progress: "studyvault.progress",
+  examDisplayName: "studyvault.exam.displayName",
+  examMyAttempts: "studyvault.exam.myAttempts",
 } as const;
 
 function read<T>(key: string, fallback: T): T {
@@ -55,6 +57,25 @@ export const storage = {
   },
   setProgress(state: ProgressState): void {
     write(KEYS.progress, state);
+  },
+
+  // Kiểm tra: tên hiển thị (dùng cho kết quả/leaderboard/solo) và danh
+  // sách id các lượt làm bài của chính thiết bị này (để hiện ở "Lịch sử
+  // kiểm tra" — kết quả vẫn lưu chung trên Supabase để Leaderboard đọc
+  // được từ mọi thiết bị, nhưng "của tôi" thì lọc theo danh sách này).
+  getExamDisplayName(): string {
+    return read<string>(KEYS.examDisplayName, "");
+  },
+  setExamDisplayName(name: string): void {
+    write(KEYS.examDisplayName, name);
+  },
+
+  getMyExamAttemptIds(): string[] {
+    return read<string[]>(KEYS.examMyAttempts, []);
+  },
+  addMyExamAttemptId(attemptId: string): void {
+    const current = read<string[]>(KEYS.examMyAttempts, []);
+    write(KEYS.examMyAttempts, [attemptId, ...current].slice(0, 200));
   },
 };
 

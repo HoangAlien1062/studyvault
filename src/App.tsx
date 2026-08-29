@@ -10,10 +10,18 @@ import Search from "./pages/Search";
 import Favorites from "./pages/Favorites";
 import History from "./pages/History";
 import Progress from "./pages/Progress";
+import ExamsPage from "./pages/exams/ExamsPage";
+import QuestionsPage from "./pages/exams/QuestionsPage";
+import CreateExamPage from "./pages/exams/CreateExamPage";
+import TakeExamPage from "./pages/exams/TakeExamPage";
+import ExamResultPage from "./pages/exams/ExamResultPage";
+import ExamHistoryPage from "./pages/exams/ExamHistoryPage";
+import LeaderboardPage from "./pages/exams/LeaderboardPage";
 import AdminCourses from "./pages/admin/AdminCourses";
 import AdminTeachers from "./pages/admin/AdminTeachers";
 import AdminChapters from "./pages/admin/AdminChapters";
 import AdminLessons from "./pages/admin/AdminLessons";
+import AdminGate from "./components/admin/AdminGate";
 import NotFound from "./pages/NotFound";
 import { useContentReady } from "./hooks/useUserData";
 import { siteConfig } from "./config/site";
@@ -51,10 +59,59 @@ export default function App() {
         <Route path="/favorites" element={<Favorites />} />
         <Route path="/history" element={<History />} />
         <Route path="/progress" element={<Progress />} />
-        <Route path="/admin" element={<AdminCourses />} />
-        <Route path="/admin/:courseId" element={<AdminTeachers />} />
-        <Route path="/admin/:courseId/:teacherId" element={<AdminChapters />} />
-        <Route path="/admin/:courseId/:teacherId/:chapterId" element={<AdminLessons />} />
+        <Route path="/exams" element={<ExamsPage />} />
+        <Route
+          path="/exams/questions"
+          element={
+            <AdminGate>
+              <QuestionsPage />
+            </AdminGate>
+          }
+        />
+        <Route
+          path="/exams/create"
+          element={
+            <AdminGate>
+              <CreateExamPage />
+            </AdminGate>
+          }
+        />
+        <Route path="/exams/history" element={<ExamHistoryPage />} />
+        <Route path="/exams/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/exams/:examId/result/:attemptId" element={<ExamResultPage />} />
+        <Route path="/exams/:examId" element={<TakeExamPage />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminGate>
+              <AdminCourses />
+            </AdminGate>
+          }
+        />
+        <Route
+          path="/admin/:courseId"
+          element={
+            <AdminGate>
+              <AdminTeachers />
+            </AdminGate>
+          }
+        />
+        <Route
+          path="/admin/:courseId/:teacherId"
+          element={
+            <AdminGate>
+              <AdminChapters />
+            </AdminGate>
+          }
+        />
+        <Route
+          path="/admin/:courseId/:teacherId/:chapterId"
+          element={
+            <AdminGate>
+              <AdminLessons />
+            </AdminGate>
+          }
+        />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

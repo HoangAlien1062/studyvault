@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Breadcrumb from "../../components/layout/Breadcrumb";
 import Button from "../../components/ui/Button";
+import Card from "../../components/ui/Card";
 import EmptyState from "../../components/ui/EmptyState";
 import { FieldGroup, Input, Textarea } from "../../components/ui/Field";
 import { useCourses } from "../../hooks/useUserData";
+import { useAdminAuth } from "../../hooks/useAdminAuth";
 import { countCourseChapters, countCourseLessons } from "../../lib/catalog";
 import { createCourse, deleteCourse, resetToDefaultContent, updateCourse } from "../../lib/contentStore";
 import type { Course } from "../../types";
@@ -27,6 +29,7 @@ const emptyForm: CourseForm = {
 
 export default function AdminCourses() {
   const courses = useCourses();
+  const { lock } = useAdminAuth();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<CourseForm>(emptyForm);
@@ -103,8 +106,31 @@ export default function AdminCourses() {
           <Button size="sm" icon="+" onClick={startCreate}>
             Thêm môn học
           </Button>
+          <Button variant="ghost" size="sm" onClick={lock} title="Khóa lại khu vực quản trị">
+            🔒 Khóa
+          </Button>
         </div>
       </div>
+
+      <Card className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display font-semibold text-ash-200">📝 Quản lý Kiểm tra</h2>
+          <p className="text-sm text-ash-400 mt-1 max-w-md">
+            Ngân hàng câu hỏi và tạo đề — chỉ admin mới thấy phần này, người dùng thường chỉ thấy
+            trang Làm bài / Xếp hạng.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Link to="/exams/questions">
+            <Button size="sm" variant="secondary">
+              Ngân hàng câu hỏi →
+            </Button>
+          </Link>
+          <Link to="/exams/create">
+            <Button size="sm">+ Tạo đề</Button>
+          </Link>
+        </div>
+      </Card>
 
       {panelOpen && (
         <div className="surface-card p-5 space-y-4 animate-fadeUp">
