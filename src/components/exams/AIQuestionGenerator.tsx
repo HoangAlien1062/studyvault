@@ -62,6 +62,54 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
     });
   }
 
+  /**
+   * Ảnh chụp bằng camera điện thoại thường rất nặng (3–8MB), mã hoá base64
+   * lại phình thêm ~33% → dễ vượt giới hạn dung lượng request của server.
+   * Resize xuống tối đa 1800px chiều dài + nén JPEG 82% trước khi gửi đi,
+   * vẫn đủ nét để AI đọc chữ mà nhẹ hơn nhiều.
+   */
+  async function compressImage(file: File): Promise<{ base64: string; mimeType: string }> {
+    const dataUrl = await fileToBase64(file);
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Không đọc được ảnh."));
+      img.src = dataUrl;
+    });
+
+    const MAX_DIM = 1800;
+    const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { base64: dataUrl, mimeType: file.type };
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const compressed = canvas.toDataURL("image/jpeg", 0.82);
+    return { base64: compressed, mimeType: "image/jpeg" };
+  }
+
+  /** fetch JSON an toàn: nếu server trả về text/html (vd trang lỗi của Vercel
+   * khi request quá nặng hoặc function crash), báo lỗi rõ ràng thay vì crash
+   * khi cố gắng res.json() một chuỗi không phải JSON. */
+  async function fetchJson(url: string, body: unknown): Promise<{ ok: boolean; data: any }> {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const raw = await res.text();
+    try {
+      return { ok: res.ok, data: JSON.parse(raw) };
+    } catch {
+      const hint =
+        res.status === 413 || raw.toLowerCase().includes("large")
+          ? "File quá nặng, thử chụp lại ở độ phân giải thấp hơn hoặc chọn ảnh khác."
+          : "Server gặp sự cố (không trả về JSON hợp lệ). Thử lại sau ít phút.";
+      return { ok: false, data: { error: hint } };
+    }
+  }
+
   /** DOCX/XLSX/XLS/CSV/TXT: trích xuất text ngay trên trình duyệt, không cần AI đọc ảnh. */
   async function extractTextFromFile(file: File): Promise<string> {
     const name = file.name.toLowerCase();
@@ -132,15 +180,15 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
       });
       setDocumentId(doc.id);
 
-      const imageBase64 = await fileToBase64(file);
-      const res = await fetch("/api/analyze-document", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ imageBase64, mimeType: file.type }),
-      });
-      const data = await res.json();
+      // Ảnh thì nén/resize trước khi gửi (đỡ vượt giới hạn request);
+      // PDF gửi nguyên bản vì không thể xử lý bằng canvas.
+      const { base64: imageBase64, mimeType } = file.type.startsWith("image/")
+        ? await compressImage(file)
+        : { base64: await fileToBase64(file), mimeType: file.type };
 
-      if (!res.ok) {
+      const { ok, data } = await fetchJson("/api/analyze-document", { imageBase64, mimeType });
+
+      if (!ok) {
         updateDocument(doc.id, { aiStatus: "failed", aiError: data.error });
         setError(data.error || "Không thể đọc tài liệu.");
         setStep("setup");
@@ -173,19 +221,14 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
     setError(null);
     setStep("generating");
     try {
-      const res = await fetch("/api/generate-questions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          text: extractedText,
-          courseName: course?.name,
-          topic: topic.trim() || undefined,
-          counts: { multiple_choice: mcCount, true_false: tfCount, short_answer: saCount },
-          difficulty,
-        }),
+      const { ok, data } = await fetchJson("/api/generate-questions", {
+        text: extractedText,
+        courseName: course?.name,
+        topic: topic.trim() || undefined,
+        counts: { multiple_choice: mcCount, true_false: tfCount, short_answer: saCount },
+        difficulty,
       });
-      const data = await res.json();
-      if (!res.ok) {
+      if (!ok) {
         setError(data.error || "AI tạo câu hỏi thất bại.");
         setStep("configure");
         return;
