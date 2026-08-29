@@ -16,7 +16,7 @@
 export const config = { maxDuration: 60 };
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.6-flash";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 type QuestionType = "multiple_choice" | "true_false" | "short_answer";
