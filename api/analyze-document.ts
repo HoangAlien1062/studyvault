@@ -125,6 +125,7 @@ export default async function handler(req: any, res: any) {
         generationConfig: {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
+          thinkingConfig: { thinkingLevel: "low" },
         },
       }),
     });
@@ -138,7 +139,10 @@ export default async function handler(req: any, res: any) {
 
     const data = await response.json();
     const rawText: string =
-      data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "";
+      data?.candidates?.[0]?.content?.parts
+        ?.filter((p: { thought?: boolean }) => !p.thought)
+        ?.map((p: { text?: string }) => p.text || "")
+        .join("") || "";
 
     let parsed: { extractedText?: string; suggestedTopic?: string; warning?: string };
     try {

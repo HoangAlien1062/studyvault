@@ -229,7 +229,8 @@ Trả lời ngắn:
         ],
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: 8192,
+          maxOutputTokens: 16384,
+          thinkingConfig: { thinkingLevel: "low" },
         },
       }),
     });
@@ -243,7 +244,10 @@ Trả lời ngắn:
 
     const data = await response.json();
     const rawText: string =
-      data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "";
+      data?.candidates?.[0]?.content?.parts
+        ?.filter((p: { thought?: boolean }) => !p.thought)
+        ?.map((p: { text?: string }) => p.text || "")
+        .join("") || "";
 
     let parsedArray: unknown[];
     try {
