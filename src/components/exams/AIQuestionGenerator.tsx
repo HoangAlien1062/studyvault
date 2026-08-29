@@ -62,6 +62,34 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
     });
   }
 
+  /** DOCX/XLSX/XLS/CSV/TXT: trích xuất text ngay trên trình duyệt, không cần AI đọc ảnh. */
+  async function extractTextFromFile(file: File): Promise<string> {
+    const name = file.name.toLowerCase();
+
+    if (file.type === "text/plain" || name.endsWith(".txt")) {
+      return await file.text();
+    }
+
+    if (name.endsWith(".docx")) {
+      const mammoth = await import("mammoth");
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value;
+    }
+
+    if (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv")) {
+      const XLSX = await import("xlsx");
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
+      return workbook.SheetNames.map((sheetName) => {
+        const sheet = workbook.Sheets[sheetName];
+        return `--- ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`;
+      }).join("\n\n");
+    }
+
+    throw new Error("Định dạng file này chưa được hỗ trợ.");
+  }
+
   async function handleFileSelected(file: File | undefined) {
     if (!file) return;
     setError(null);
@@ -69,8 +97,30 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
     setFileName(file.name);
     setStep("analyzing");
 
+    const isVisual = file.type.startsWith("image/") || file.type === "application/pdf";
+
     try {
       const { fileUrl, storagePath } = await uploadDocumentFile(file);
+
+      if (!isVisual) {
+        // DOCX/XLSX/TXT: đọc text trực tiếp, không tốn AI cho bước này.
+        const text = await extractTextFromFile(file);
+        const doc = createDocument({
+          courseId: courseId || undefined,
+          title: file.name,
+          fileUrl,
+          storagePath,
+          mimeType: file.type,
+          fileSize: file.size,
+          ocrText: text,
+          aiStatus: "ready",
+        });
+        setDocumentId(doc.id);
+        setExtractedText(text);
+        setStep("configure");
+        return;
+      }
+
       const doc = createDocument({
         courseId: courseId || undefined,
         title: file.name,
@@ -222,7 +272,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
               >
                 <div className="text-2xl mb-1">📄</div>
                 <p className="text-sm text-ash-200 font-medium">Chọn file</p>
-                <p className="text-xs text-ash-500 mt-0.5">JPG, PNG, WEBP</p>
+                <p className="text-xs text-ash-500 mt-0.5">Ảnh, PDF, Word, Excel, CSV, TXT</p>
               </button>
               <button
                 type="button"
@@ -237,7 +287,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,application/pdf,.pdf,.docx,.xlsx,.xls,.csv,.txt,text/plain"
               className="hidden"
               aria-label="Chọn file tài liệu"
               onChange={(e) => handleFileSelected(e.target.files?.[0])}

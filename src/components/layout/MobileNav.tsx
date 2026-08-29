@@ -5,8 +5,7 @@ const items = [
   { to: "/courses", label: "Môn học", icon: "📚" },
   { to: "/exams", label: "Kiểm tra", icon: "📝" },
   { to: "/search", label: "Tìm kiếm", icon: "🔍" },
-  { to: "/favorites", label: "Đã lưu", icon: "⭐" },
-  { to: "/progress", label: "Tiến độ", icon: "📊" },
+  { to: "/admin", label: "Cài đặt", icon: "⚙" },
 ];
 
 export default function MobileNav() {
@@ -15,7 +14,7 @@ export default function MobileNav() {
       className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-ink-850/95 backdrop-blur border-t border-ink-600/70 pb-[env(safe-area-inset-bottom)]"
       aria-label="Điều hướng chính"
     >
-      <div className="grid grid-cols-6">
+      <div className="grid grid-cols-5">
         {items.map((item) => (
           <NavLink
             key={item.to}
