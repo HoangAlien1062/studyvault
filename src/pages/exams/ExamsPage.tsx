@@ -65,7 +65,6 @@ export default function ExamsPage() {
             <Button className="mt-1 self-start" onClick={() => navigate(action.to)}>
               {action.cta}
             </Button>
-            {action.note && <p className="text-xs text-ash-500">{action.note}</p>}
           </Card>
         ))}
       </section>

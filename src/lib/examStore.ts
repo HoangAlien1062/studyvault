@@ -76,7 +76,8 @@ async function initialize(): Promise<void> {
 
     if (data?.data) {
       // Bảo đảm tương thích ngược: các dòng cũ chưa có "documents".
-      current = { documents: [], ...(data.data as ExamData) };
+      const loaded = data.data as ExamData;
+      current = { ...loaded, documents: loaded.documents ?? [] };
     } else {
       await persistRemote(current);
     }
