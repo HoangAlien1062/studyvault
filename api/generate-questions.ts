@@ -10,7 +10,7 @@
 // Lấy key tại: https://aistudio.google.com/apikey
 // ============================================================
 
-export const config = { runtime: "edge" };
+export const config = { maxDuration: 60 };
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = "gemini-2.5-flash";
@@ -193,9 +193,12 @@ Trả lời ngắn:
 {"type":"short_answer","question":"...","difficulty":"easy|medium|hard","acceptedAnswers":["..."],"explanation":"..."}`;
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55_000);
     const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [
@@ -214,6 +217,7 @@ Trả lời ngắn:
         },
       }),
     });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -247,6 +251,6 @@ Trả lời ngắn:
       generated: questions.length,
     });
   } catch (err) {
-    return jsonResponse({ error: `Không gọi được AI: ${(err as Error).message}` }, 500);
+    return jsonResponse({ error: `Không gọi được AI: ${(err as Error).name === "AbortError" ? "quá thời gian chờ (>55s), thử lại với ít câu hỏi hơn." : (err as Error).message}` }, 500);
   }
 }

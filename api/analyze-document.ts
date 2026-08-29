@@ -17,7 +17,7 @@
 //   { extractedText: string, suggestedTopic: string, warning?: string }
 // ============================================================
 
-export const config = { runtime: "edge" };
+export const config = { maxDuration: 60 };
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = "gemini-2.5-flash";
@@ -96,9 +96,12 @@ export default async function handler(request: Request): Promise<Response> {
   }
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55_000);
     const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: "user", parts }],
@@ -108,6 +111,7 @@ export default async function handler(request: Request): Promise<Response> {
         },
       }),
     });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -144,6 +148,6 @@ export default async function handler(request: Request): Promise<Response> {
       warning: parsed.warning || "",
     });
   } catch (err) {
-    return jsonResponse({ error: `Không gọi được AI: ${(err as Error).message}` }, 500);
+    return jsonResponse({ error: `Không gọi được AI: ${(err as Error).name === "AbortError" ? "quá thời gian chờ (>55s), thử lại với ảnh nhỏ/nhẹ hơn." : (err as Error).message}` }, 500);
   }
 }
