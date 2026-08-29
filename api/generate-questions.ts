@@ -1,5 +1,5 @@
 // ============================================================
-// /api/generate-questions — Vercel Edge Function
+// /api/generate-questions — Vercel Node.js Function
 //
 // Nhận nội dung văn bản (đã được /api/analyze-document đọc ra, hoặc
 // người dùng dán tay) + cấu hình (số câu, loại câu, độ khó), gọi
@@ -8,6 +8,9 @@
 // AI — mục 55 spec: câu AI tạo luôn ở trạng thái "draft").
 //
 // Lấy key tại: https://aistudio.google.com/apikey
+//
+// Dùng Node.js runtime (không phải Edge) vì có thể mất hơn 25s —
+// Edge Function bị giới hạn cứng 25s, Node.js cho phép tới 60s (free).
 // ============================================================
 
 export const config = { maxDuration: 60 };
@@ -23,7 +26,7 @@ interface GenerateRequestBody {
   text: string;
   courseName?: string;
   topic?: string;
-  counts: Partial<Record<QuestionType, number>>; // vd { multiple_choice: 10, true_false: 5 }
+  counts: Partial<Record<QuestionType, number>>;
   difficulty: Difficulty;
 }
 
@@ -38,18 +41,28 @@ interface RawQuestion {
   explanation?: string;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
 function extractJsonBlock(raw: string): string {
   const start = raw.indexOf("[");
   const end = raw.lastIndexOf("]");
   if (start === -1 || end === -1) return raw;
   return raw.slice(start, end + 1);
+}
+
+/** Đọc body JSON thô — không phụ thuộc gói @vercel/node để tránh phải cài thêm. */
+function readJsonBody(req: any): Promise<any> {
+  if (req.body && typeof req.body === "object") return Promise.resolve(req.body);
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk: Buffer) => (raw += chunk));
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on("error", reject);
+  });
 }
 
 const OPTION_IDS = ["A", "B", "C", "D"];
@@ -122,39 +135,41 @@ function sanitizeQuestion(raw: unknown): RawQuestion | null {
   return null;
 }
 
-export default async function handler(request: Request): Promise<Response> {
-  if (request.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+export default async function handler(req: any, res: any) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
 
   if (!GEMINI_API_KEY) {
-    return jsonResponse(
-      {
-        error:
-          "Server chưa cấu hình GEMINI_API_KEY. Thêm biến môi trường này trên Vercel rồi redeploy.",
-      },
-      500
-    );
+    res.status(500).json({
+      error: "Server chưa cấu hình GEMINI_API_KEY. Thêm biến môi trường này trên Vercel rồi redeploy.",
+    });
+    return;
   }
 
   let body: GenerateRequestBody;
   try {
-    body = await request.json();
+    body = await readJsonBody(req);
   } catch {
-    return jsonResponse({ error: "Body không phải JSON hợp lệ." }, 400);
+    res.status(400).json({ error: "Body không phải JSON hợp lệ." });
+    return;
   }
 
   if (!body.text || !body.text.trim()) {
-    return jsonResponse({ error: "Thiếu nội dung tài liệu (text)." }, 400);
+    res.status(400).json({ error: "Thiếu nội dung tài liệu (text)." });
+    return;
   }
 
   const counts = body.counts || {};
   const totalRequested = Object.values(counts).reduce((sum, n) => sum + (n || 0), 0);
   if (totalRequested <= 0) {
-    return jsonResponse({ error: "Cần chọn ít nhất 1 câu hỏi để tạo." }, 400);
+    res.status(400).json({ error: "Cần chọn ít nhất 1 câu hỏi để tạo." });
+    return;
   }
   if (totalRequested > 60) {
-    return jsonResponse({ error: "Tối đa 60 câu mỗi lần tạo." }, 400);
+    res.status(400).json({ error: "Tối đa 60 câu mỗi lần tạo." });
+    return;
   }
 
   const requestLines: string[] = [];
@@ -195,6 +210,7 @@ Trả lời ngắn:
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55_000);
+
     const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -221,7 +237,8 @@ Trả lời ngắn:
 
     if (!response.ok) {
       const errText = await response.text();
-      return jsonResponse({ error: `Gemini API lỗi: ${errText}` }, 502);
+      res.status(502).json({ error: `Gemini API lỗi: ${errText}` });
+      return;
     }
 
     const data = await response.json();
@@ -233,24 +250,28 @@ Trả lời ngắn:
       parsedArray = JSON.parse(extractJsonBlock(rawText));
       if (!Array.isArray(parsedArray)) throw new Error("not array");
     } catch {
-      return jsonResponse({ error: "AI trả về định dạng không hợp lệ, vui lòng thử lại." }, 502);
+      res.status(502).json({ error: "AI trả về định dạng không hợp lệ, vui lòng thử lại." });
+      return;
     }
 
     const questions = parsedArray.map(sanitizeQuestion).filter((q): q is RawQuestion => q !== null);
 
     if (questions.length === 0) {
-      return jsonResponse(
-        { error: "AI không tạo được câu hỏi hợp lệ từ tài liệu này, thử lại hoặc chọn tài liệu khác." },
-        422
-      );
+      res.status(422).json({
+        error: "AI không tạo được câu hỏi hợp lệ từ tài liệu này, thử lại hoặc chọn tài liệu khác.",
+      });
+      return;
     }
 
-    return jsonResponse({
+    res.status(200).json({
       questions,
       requested: totalRequested,
       generated: questions.length,
     });
   } catch (err) {
-    return jsonResponse({ error: `Không gọi được AI: ${(err as Error).name === "AbortError" ? "quá thời gian chờ (>55s), thử lại với ít câu hỏi hơn." : (err as Error).message}` }, 500);
+    const isAbort = (err as Error).name === "AbortError";
+    res.status(500).json({
+      error: `Không gọi được AI: ${isAbort ? "quá thời gian chờ (>55s), thử lại với ít câu hỏi hơn." : (err as Error).message}`,
+    });
   }
 }
