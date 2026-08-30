@@ -1,6 +1,7 @@
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
+import MathText from "../ui/MathText";
 import { DIFFICULTY_LABEL, QUESTION_TYPE_LABEL, type Question } from "../../types/exam";
 import { getCourse } from "../../lib/catalog";
 
@@ -11,14 +12,36 @@ interface QuestionCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onApprove?: () => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelected?: () => void;
 }
 
-export default function QuestionCard({ question, onEdit, onDelete, onApprove }: QuestionCardProps) {
+export default function QuestionCard({
+  question,
+  onEdit,
+  onDelete,
+  onApprove,
+  selectable,
+  selected,
+  onToggleSelected,
+}: QuestionCardProps) {
   const course = getCourse(question.courseId);
 
   return (
-    <Card className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <Card className={`space-y-3 relative ${selectable && selected ? "ring-2 ring-cue" : ""}`}>
+      {selectable && (
+        <label className="absolute top-3 right-3 z-10">
+          <input
+            type="checkbox"
+            checked={Boolean(selected)}
+            onChange={onToggleSelected}
+            className="h-5 w-5 accent-cue cursor-pointer"
+            aria-label="Chọn câu hỏi này"
+          />
+        </label>
+      )}
+      <div className="flex flex-wrap items-center gap-2 pr-8">
         <Badge>{course?.shortName ?? "?"}</Badge>
         <Badge>{question.topic}</Badge>
         <Badge tone="cue">{QUESTION_TYPE_LABEL[question.type]}</Badge>
@@ -28,7 +51,17 @@ export default function QuestionCard({ question, onEdit, onDelete, onApprove }: 
         {question.status === "reviewed" && <Badge tone="cue">Đã xem, chưa publish</Badge>}
       </div>
 
-      <p className="text-sm text-ash-200 leading-relaxed">{question.question}</p>
+      <p className="text-sm text-ash-200 leading-relaxed">
+        <MathText text={question.question} />
+      </p>
+
+      {question.imageUrl && (
+        <img
+          src={question.imageUrl}
+          alt="Ảnh minh họa câu hỏi"
+          className="max-h-56 rounded-lg border border-ink-600"
+        />
+      )}
 
       {question.type === "multiple_choice" && question.options && (
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-ash-400">
@@ -37,7 +70,7 @@ export default function QuestionCard({ question, onEdit, onDelete, onApprove }: 
               key={opt.id}
               className={opt.id === question.correctAnswer ? "text-signal-done font-medium" : ""}
             >
-              {opt.id}. {opt.text}
+              {opt.id}. <MathText text={opt.text} />
             </li>
           ))}
         </ul>
@@ -47,7 +80,7 @@ export default function QuestionCard({ question, onEdit, onDelete, onApprove }: 
         <ul className="space-y-1 text-xs text-ash-400">
           {question.statements.map((st) => (
             <li key={st.id}>
-              {st.id}) {st.text} —{" "}
+              {st.id}) <MathText text={st.text} /> —{" "}
               <span className={st.correctAnswer ? "text-signal-done" : "text-signal-live"}>
                 {st.correctAnswer ? "Đúng" : "Sai"}
               </span>

@@ -8,7 +8,7 @@ import QuestionEditor from "../../components/exams/QuestionEditor";
 import BulkQuestionImport from "../../components/exams/BulkQuestionImport";
 import AIQuestionGenerator from "../../components/exams/AIQuestionGenerator";
 import { useExamData, useExamDataReady } from "../../hooks/useExamData";
-import { createQuestion, deleteQuestion, updateQuestion } from "../../lib/examStore";
+import { createQuestion, deleteQuestion, deleteQuestions, updateQuestion } from "../../lib/examStore";
 import { useCourses } from "../../hooks/useUserData";
 import type { Question } from "../../types/exam";
 
@@ -27,6 +27,8 @@ export default function QuestionsPage() {
   const [editing, setEditing] = useState<Question | null>(null);
   const [creating, setCreating] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>("ai");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
     return questions.filter((q) => {
@@ -39,6 +41,38 @@ export default function QuestionsPage() {
     });
   }, [questions, courseFilter, typeFilter, difficultyFilter, statusFilter, query]);
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function handleDeleteSelected() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Xóa ${selectedIds.size} câu hỏi đã chọn? Không thể hoàn tác.`)) return;
+    deleteQuestions(Array.from(selectedIds));
+    exitSelectMode();
+  }
+
+  function handleDeleteAllFiltered() {
+    if (filtered.length === 0) return;
+    const label =
+      courseFilter === "all" && typeFilter === "all" && difficultyFilter === "all" && statusFilter === "all" && !query
+        ? `TOÀN BỘ ${filtered.length} câu hỏi trong ngân hàng`
+        : `${filtered.length} câu hỏi đang lọc hiện tại`;
+    if (!confirm(`Xóa ${label}? Không thể hoàn tác.`)) return;
+    deleteQuestions(filtered.map((q) => q.id));
+    exitSelectMode();
+  }
+
   const showForm = creating || editing;
 
   return (
@@ -47,8 +81,49 @@ export default function QuestionsPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-display font-bold text-ash-200">Ngân hàng câu hỏi</h1>
-        {!showForm && <Button onClick={() => setCreating(true)}>+ Thêm câu hỏi</Button>}
+        {!showForm && (
+          <div className="flex items-center gap-2">
+            {selectMode ? (
+              <Button variant="ghost" onClick={exitSelectMode}>
+                Hủy chọn
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setSelectMode(true)}>
+                ☑ Chọn nhiều
+              </Button>
+            )}
+            <Button onClick={() => setCreating(true)}>+ Thêm câu hỏi</Button>
+          </div>
+        )}
       </div>
+
+      {selectMode && !showForm && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink-600 bg-ink-800/60 px-4 py-3">
+          <p className="text-sm text-ash-300">
+            Đã chọn <strong className="text-ash-200">{selectedIds.size}</strong> / {filtered.length} câu
+            {" · "}
+            <button
+              type="button"
+              className="text-cue hover:underline"
+              onClick={() =>
+                setSelectedIds(
+                  selectedIds.size === filtered.length ? new Set() : new Set(filtered.map((q) => q.id))
+                )
+              }
+            >
+              {selectedIds.size === filtered.length ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+            </button>
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="danger" size="sm" disabled={selectedIds.size === 0} onClick={handleDeleteSelected}>
+              🗑 Xóa đã chọn ({selectedIds.size})
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleDeleteAllFiltered}>
+              🗑 Xóa tất cả đang lọc ({filtered.length})
+            </Button>
+          </div>
+        </div>
+      )}
 
       {showForm ? (
         <div className="space-y-4">
@@ -162,6 +237,9 @@ export default function QuestionsPage() {
                     if (confirm("Xóa câu hỏi này?")) deleteQuestion(q.id);
                   }}
                   onApprove={() => updateQuestion(q.id, { status: "published" })}
+                  selectable={selectMode}
+                  selected={selectedIds.has(q.id)}
+                  onToggleSelected={() => toggleSelected(q.id)}
                 />
               ))}
             </div>

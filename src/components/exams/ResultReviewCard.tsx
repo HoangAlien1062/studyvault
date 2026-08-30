@@ -1,5 +1,6 @@
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
+import MathText from "../ui/MathText";
 import type { AnswerResult, Question, UserAnswer } from "../../types/exam";
 
 interface ResultReviewCardProps {
@@ -28,7 +29,17 @@ export default function ResultReviewCard({ index, question, answer, result }: Re
         </div>
       </div>
 
-      <p className="text-sm text-ash-200">{question.question}</p>
+      <p className="text-sm text-ash-200">
+        <MathText text={question.question} />
+      </p>
+
+      {question.imageUrl && (
+        <img
+          src={question.imageUrl}
+          alt="Ảnh minh họa câu hỏi"
+          className="max-h-56 rounded-lg border border-ink-600"
+        />
+      )}
 
       {question.type === "multiple_choice" && question.options && (
         <ul className="space-y-1 text-sm">
@@ -46,7 +57,7 @@ export default function ResultReviewCard({ index, question, answer, result }: Re
                     : "border-transparent text-ash-400"
                 }`}
               >
-                {opt.id}. {opt.text}
+                {opt.id}. <MathText text={opt.text} />
                 {isAnswerKey && " — đáp án đúng"}
                 {isSelected && !isAnswerKey && " — bạn chọn"}
               </li>
@@ -63,7 +74,7 @@ export default function ResultReviewCard({ index, question, answer, result }: Re
             return (
               <li key={st.id} className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border border-ink-600">
                 <span className="text-ash-300">
-                  {st.id}) {st.text}
+                  {st.id}) <MathText text={st.text} />
                 </span>
                 <span className={correct ? "text-signal-done" : "text-signal-live"}>
                   {userVal === undefined ? "○" : correct ? "✓" : "✗"} {st.correctAnswer ? "Đúng" : "Sai"}

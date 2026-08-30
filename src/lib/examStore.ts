@@ -142,6 +142,26 @@ export function deleteQuestion(questionId: string): void {
   persist();
 }
 
+/** Xóa nhiều câu hỏi cùng lúc (chọn nhiều để xóa). */
+export function deleteQuestions(questionIds: string[]): void {
+  const idSet = new Set(questionIds);
+  current = {
+    ...deepClone(current),
+    questions: deepClone(current.questions).filter((q) => !idSet.has(q.id)),
+  };
+  persist();
+}
+
+/** Xóa toàn bộ câu hỏi đang hiển thị theo bộ lọc hiện tại (hoặc toàn bộ ngân hàng nếu không truyền ids). */
+export function deleteAllQuestions(questionIds?: string[]): void {
+  if (!questionIds) {
+    current = { ...deepClone(current), questions: [] };
+    persist();
+    return;
+  }
+  deleteQuestions(questionIds);
+}
+
 // ---------------------------------------------------------------
 // Exam CRUD
 // ---------------------------------------------------------------

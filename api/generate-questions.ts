@@ -28,6 +28,7 @@ interface GenerateRequestBody {
   topic?: string;
   counts: Partial<Record<QuestionType, number>>;
   difficulty: Difficulty;
+  hasSourceImage?: boolean; // tài liệu gốc là 1 ảnh — có thể gắn lại ảnh đó cho câu cần xem hình
 }
 
 interface RawQuestion {
@@ -39,6 +40,7 @@ interface RawQuestion {
   statements?: { id: string; text: string; correctAnswer: boolean }[];
   acceptedAnswers?: string[];
   explanation?: string;
+  referencesFigure?: boolean;
 }
 
 function extractJsonBlock(raw: string): string {
@@ -76,6 +78,7 @@ function sanitizeQuestion(raw: unknown): RawQuestion | null {
   const difficulty = (["easy", "medium", "hard"].includes(q.difficulty as string)
     ? q.difficulty
     : "medium") as "easy" | "medium" | "hard";
+  const referencesFigure = q.referencesFigure === true;
 
   if (typeof q.question !== "string" || !q.question.trim()) return null;
 
@@ -95,6 +98,7 @@ function sanitizeQuestion(raw: unknown): RawQuestion | null {
       options: normalizedOptions,
       correctAnswer,
       explanation: typeof q.explanation === "string" ? q.explanation : undefined,
+      referencesFigure,
     };
   }
 
@@ -115,6 +119,7 @@ function sanitizeQuestion(raw: unknown): RawQuestion | null {
       difficulty,
       statements: normalized,
       explanation: typeof q.explanation === "string" ? q.explanation : undefined,
+      referencesFigure,
     };
   }
 
@@ -129,6 +134,7 @@ function sanitizeQuestion(raw: unknown): RawQuestion | null {
       difficulty,
       acceptedAnswers: accepted,
       explanation: typeof q.explanation === "string" ? q.explanation : undefined,
+      referencesFigure,
     };
   }
 
@@ -182,11 +188,24 @@ export default async function handler(req: any, res: any) {
       ? "độ khó hỗn hợp (trộn dễ/trung bình/khó)"
       : `độ khó "${body.difficulty}"`;
 
+  const figureInstruction = body.hasSourceImage
+    ? `Tài liệu gốc LÀ MỘT ẢNH CHỤP (có thể chứa hình vẽ/đồ thị/sơ đồ/bảng biểu).
+Nếu một câu hỏi bắt buộc phải nhìn hình minh họa mới trả lời được (vd "quan sát hình
+bên", đồ thị hàm số, mạch điện, sơ đồ...), đặt "referencesFigure": true cho câu đó —
+hệ thống sẽ tự đính kèm lại ảnh gốc cho câu này. Ưu tiên đặt câu hỏi có thể trả lời
+CHỈ BẰNG CHỮ khi có thể, chỉ dùng referencesFigure khi thực sự cần thiết.`
+    : `Tài liệu gốc KHÔNG có hình ảnh đính kèm (chỉ có chữ). TUYỆT ĐỐI KHÔNG tạo câu hỏi
+yêu cầu "quan sát hình/đồ thị/sơ đồ bên" hay bất kỳ hình minh họa nào — vì sẽ không
+có ảnh nào hiển thị cho học sinh xem. Nếu cần mô tả một tình huống có tính không gian
+(hình học, mạch điện...), hãy diễn đạt đầy đủ bằng lời/số liệu trong chính câu hỏi.`;
+
   const systemPrompt = `Bạn là giáo viên biên soạn câu hỏi ôn tập tiếng Việt${
     body.courseName ? ` môn ${body.courseName}` : ""
   }. Chỉ tạo câu hỏi dựa TRÊN nội dung tài liệu được cung cấp — không bịa
 kiến thức ngoài tài liệu trừ khi tài liệu quá ít thông tin thì có thể bổ
 sung kiến thức phổ thông liên quan trực tiếp đến chủ đề.
+
+${figureInstruction}
 
 Giữ nguyên ký hiệu toán học/công thức nếu có (dùng LaTeX dạng $...$).
 
@@ -196,16 +215,17 @@ ${requestLines.join("\n")}
 Với ${difficultyText}.
 
 Chỉ trả lời bằng một JSON array hợp lệ, KHÔNG kèm giải thích, KHÔNG markdown.
-Mỗi phần tử theo đúng 1 trong 3 dạng:
+Mỗi phần tử theo đúng 1 trong 3 dạng (field "referencesFigure" là boolean, tùy chọn,
+mặc định false nếu không có):
 
 Trắc nghiệm:
-{"type":"multiple_choice","question":"...","difficulty":"easy|medium|hard","options":[{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}],"correctAnswer":"B","explanation":"..."}
+{"type":"multiple_choice","question":"...","difficulty":"easy|medium|hard","options":[{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}],"correctAnswer":"B","explanation":"...","referencesFigure":false}
 
 Đúng/Sai (LUÔN đúng 4 ý):
-{"type":"true_false","question":"...","difficulty":"easy|medium|hard","statements":[{"id":"a","text":"...","correctAnswer":true},{"id":"b","text":"...","correctAnswer":false},{"id":"c","text":"...","correctAnswer":true},{"id":"d","text":"...","correctAnswer":false}],"explanation":"..."}
+{"type":"true_false","question":"...","difficulty":"easy|medium|hard","statements":[{"id":"a","text":"...","correctAnswer":true},{"id":"b","text":"...","correctAnswer":false},{"id":"c","text":"...","correctAnswer":true},{"id":"d","text":"...","correctAnswer":false}],"explanation":"...","referencesFigure":false}
 
 Trả lời ngắn:
-{"type":"short_answer","question":"...","difficulty":"easy|medium|hard","acceptedAnswers":["..."],"explanation":"..."}`;
+{"type":"short_answer","question":"...","difficulty":"easy|medium|hard","acceptedAnswers":["..."],"explanation":"...","referencesFigure":false}`;
 
   try {
     const controller = new AbortController();

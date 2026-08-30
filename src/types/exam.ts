@@ -60,6 +60,7 @@ export interface Question {
   acceptedAnswers?: string[];
 
   explanation?: string;
+  imageUrl?: string; // ảnh minh họa (hình vẽ/đồ thị/sơ đồ) đi kèm câu hỏi, nếu có
   source: QuestionSource;
   status: QuestionStatus;
   documentId?: string;

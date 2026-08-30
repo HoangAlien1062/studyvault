@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import Card from "../ui/Card";
 import Button from "../ui/Button";
 import Badge from "../ui/Badge";
+import MathText from "../ui/MathText";
 import { FieldGroup, Input, Select, Textarea } from "../ui/Field";
 import type { Course } from "../../types";
 import type { Difficulty, Question, QuestionType } from "../../types/exam";
@@ -21,6 +22,8 @@ interface GeneratedQuestion {
   statements?: { id: string; text: string; correctAnswer: boolean }[];
   acceptedAnswers?: string[];
   explanation?: string;
+  referencesFigure?: boolean;
+  imageUrl?: string; // ảnh gốc gắn lại khi câu hỏi cần xem hình (chỉ khi tài liệu nguồn là ảnh)
   include: boolean;
 }
 
@@ -38,6 +41,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
   const [topic, setTopic] = useState("");
   const [pastedText, setPastedText] = useState("");
   const [documentId, setDocumentId] = useState<string | null>(null);
+  const [sourceImageUrl, setSourceImageUrl] = useState<string | null>(null); // tài liệu gốc nếu là ảnh
   const [extractedText, setExtractedText] = useState("");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +168,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
           aiStatus: "ready",
         });
         setDocumentId(doc.id);
+        setSourceImageUrl(null);
         setExtractedText(text);
         setStep("configure");
         return;
@@ -179,6 +184,9 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
         aiStatus: "analyzing",
       });
       setDocumentId(doc.id);
+      // Chỉ ảnh (không phải PDF) mới gắn lại được cho từng câu hỏi cụ thể —
+      // PDF có thể nhiều trang nên không rõ nên gắn trang nào.
+      setSourceImageUrl(file.type.startsWith("image/") ? fileUrl : null);
 
       // Ảnh thì nén/resize trước khi gửi (đỡ vượt giới hạn request);
       // PDF gửi nguyên bản vì không thể xử lý bằng canvas.
@@ -213,6 +221,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
   function useTextDirectly() {
     if (!pastedText.trim()) return;
     setExtractedText(pastedText.trim());
+    setSourceImageUrl(null);
     setError(null);
     setStep("configure");
   }
@@ -227,6 +236,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
         topic: topic.trim() || undefined,
         counts: { multiple_choice: mcCount, true_false: tfCount, short_answer: saCount },
         difficulty,
+        hasSourceImage: Boolean(sourceImageUrl),
       });
       if (!ok) {
         setError(data.error || "AI tạo câu hỏi thất bại.");
@@ -234,7 +244,11 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
         return;
       }
       setGenerated(
-        (data.questions as GeneratedQuestion[]).map((q) => ({ ...q, include: true }))
+        (data.questions as GeneratedQuestion[]).map((q) => ({
+          ...q,
+          include: true,
+          imageUrl: q.referencesFigure && sourceImageUrl ? sourceImageUrl : undefined,
+        }))
       );
       setStep("preview");
     } catch (err) {
@@ -263,6 +277,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
         statements: q.statements,
         acceptedAnswers: q.acceptedAnswers,
         explanation: q.explanation,
+        imageUrl: q.imageUrl,
         source: "ai",
         status: "draft", // mục 55: AI tạo luôn ở trạng thái draft, phải duyệt mới đưa vào đề chính thức
         documentId: documentId ?? undefined,
@@ -467,12 +482,21 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
                       {q.difficulty === "easy" ? "Dễ" : q.difficulty === "hard" ? "Khó" : "Trung bình"}
                     </span>
                   </div>
-                  <p className="text-sm text-ash-200">{q.question}</p>
+                  <p className="text-sm text-ash-200">
+                    <MathText text={q.question} />
+                  </p>
+                  {q.imageUrl && (
+                    <img
+                      src={q.imageUrl}
+                      alt="Ảnh minh họa câu hỏi"
+                      className="mt-2 max-h-48 rounded-lg border border-ink-600"
+                    />
+                  )}
                   {q.type === "multiple_choice" && q.options && (
                     <ul className="mt-1.5 text-xs text-ash-400 space-y-0.5">
                       {q.options.map((opt) => (
                         <li key={opt.id} className={opt.id === q.correctAnswer ? "text-signal-done" : ""}>
-                          {opt.id}. {opt.text} {opt.id === q.correctAnswer ? "✓" : ""}
+                          {opt.id}. <MathText text={opt.text} /> {opt.id === q.correctAnswer ? "✓" : ""}
                         </li>
                       ))}
                     </ul>
@@ -481,7 +505,7 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
                     <ul className="mt-1.5 text-xs text-ash-400 space-y-0.5">
                       {q.statements.map((s) => (
                         <li key={s.id} className={s.correctAnswer ? "text-signal-done" : ""}>
-                          {s.id}) {s.text} — {s.correctAnswer ? "Đúng" : "Sai"}
+                          {s.id}) <MathText text={s.text} /> — {s.correctAnswer ? "Đúng" : "Sai"}
                         </li>
                       ))}
                     </ul>

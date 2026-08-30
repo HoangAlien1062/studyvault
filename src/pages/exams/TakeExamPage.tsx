@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
+import MathText from "../../components/ui/MathText";
 import { FieldGroup, Input } from "../../components/ui/Field";
 import ExamTimer from "../../components/exams/ExamTimer";
 import QuestionAnswerInput from "../../components/exams/QuestionAnswerInput";
@@ -167,7 +168,16 @@ export default function TakeExamPage() {
         <div className="flex-1 min-w-0 space-y-4">
           <Card className="space-y-4">
             <p className="text-xs font-mono text-ash-500">Câu {current + 1} / {orderedQuestions.length}</p>
-            <p className="text-sm text-ash-200 leading-relaxed">{q.question}</p>
+            <p className="text-sm text-ash-200 leading-relaxed">
+              <MathText text={q.question} />
+            </p>
+            {q.imageUrl && (
+              <img
+                src={q.imageUrl}
+                alt="Ảnh minh họa câu hỏi"
+                className="max-h-64 rounded-lg border border-ink-600"
+              />
+            )}
             <QuestionAnswerInput question={q} answer={answers[q.id]} onChange={handleAnswer} />
           </Card>
 

@@ -1,4 +1,5 @@
 import { Input } from "../ui/Field";
+import MathText from "../ui/MathText";
 import type { Question, UserAnswer } from "../../types/exam";
 
 interface QuestionAnswerInputProps {
@@ -30,7 +31,7 @@ export default function QuestionAnswerInput({ question, answer, onChange }: Ques
             />
             <span className="text-sm">
               <span className="font-semibold mr-1.5">{opt.id}.</span>
-              {opt.text}
+              <MathText text={opt.text} />
             </span>
           </label>
         ))}
@@ -49,7 +50,7 @@ export default function QuestionAnswerInput({ question, answer, onChange }: Ques
           >
             <span className="text-sm text-ash-300 flex-1">
               <span className="font-semibold mr-1.5">{st.id})</span>
-              {st.text}
+              <MathText text={st.text} />
             </span>
             <div className="flex gap-1.5 shrink-0">
               {(["Đúng", "Sai"] as const).map((label) => {

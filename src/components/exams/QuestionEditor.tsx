@@ -5,6 +5,7 @@ import { FieldGroup, Input, Select, Textarea } from "../ui/Field";
 import type { Course } from "../../types";
 import type { Difficulty, Question, QuestionType, TrueFalseStatement } from "../../types/exam";
 import type { QuestionInput } from "../../lib/examStore";
+import { uploadDocumentFile } from "../../lib/examStore";
 
 const emptyStatements = (): TrueFalseStatement[] => [
   { id: "a", text: "", correctAnswer: true },
@@ -43,6 +44,23 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
   const [acceptedAnswers, setAcceptedAnswers] = useState(
     (initial?.acceptedAnswers ?? [""]).join(", ")
   );
+  const [imageUrl, setImageUrl] = useState<string | undefined>(initial?.imageUrl);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  async function handleImageSelected(file: File | undefined) {
+    if (!file) return;
+    setImageError(null);
+    setImageUploading(true);
+    try {
+      const { fileUrl } = await uploadDocumentFile(file);
+      setImageUrl(fileUrl);
+    } catch (err) {
+      setImageError((err as Error).message);
+    } finally {
+      setImageUploading(false);
+    }
+  }
 
   const canSave = courseId && topic.trim() && question.trim();
 
@@ -55,6 +73,7 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
       question: question.trim(),
       difficulty,
       explanation: explanation.trim() || undefined,
+      imageUrl,
       source: initial?.source ?? ("user" as const),
       status: initial?.status ?? ("published" as const),
       documentId: initial?.documentId,
@@ -110,6 +129,35 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
       <FieldGroup label="Nội dung câu hỏi">
         <Textarea rows={3} value={question} onChange={(e) => setQuestion(e.target.value)} />
       </FieldGroup>
+
+      <div>
+        <p className="text-xs font-medium text-ash-400 mb-1.5">Ảnh minh họa (tùy chọn — hình vẽ, đồ thị, sơ đồ...)</p>
+        {imageError && <p className="text-xs text-signal-live mb-1.5">{imageError}</p>}
+        {imageUrl ? (
+          <div className="relative inline-block">
+            <img src={imageUrl} alt="Ảnh minh họa câu hỏi" className="max-h-48 rounded-lg border border-ink-600" />
+            <button
+              type="button"
+              onClick={() => setImageUrl(undefined)}
+              className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-signal-live text-white text-xs flex items-center justify-center"
+              title="Xóa ảnh"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <label className="inline-flex items-center gap-2 rounded-lg border border-dashed border-ink-600 px-4 py-2.5 text-sm text-ash-400 cursor-pointer hover:border-cue/50 transition-colors">
+            {imageUploading ? "Đang tải lên..." : "📷 Chọn ảnh"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              disabled={imageUploading}
+              onChange={(e) => handleImageSelected(e.target.files?.[0])}
+            />
+          </label>
+        )}
+      </div>
 
       {type === "multiple_choice" && (
         <div className="space-y-2">
