@@ -175,6 +175,14 @@ export function createExam(input: ExamInput): Exam {
   return exam;
 }
 
+export function updateExam(examId: string, patch: Partial<ExamInput>): void {
+  const next = deepClone(current);
+  const exam = next.exams.find((e) => e.id === examId);
+  if (exam) Object.assign(exam, patch);
+  current = next;
+  persist();
+}
+
 export function deleteExam(examId: string): void {
   current = { ...deepClone(current), exams: deepClone(current.exams).filter((e) => e.id !== examId) };
   persist();

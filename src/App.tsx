@@ -76,6 +76,14 @@ export default function App() {
             </AdminGate>
           }
         />
+        <Route
+          path="/exams/edit/:examId"
+          element={
+            <AdminGate>
+              <CreateExamPage />
+            </AdminGate>
+          }
+        />
         <Route path="/exams/history" element={<ExamHistoryPage />} />
         <Route path="/exams/leaderboard" element={<LeaderboardPage />} />
         <Route path="/exams/:examId/result/:attemptId" element={<ExamResultPage />} />

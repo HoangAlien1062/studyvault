@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Breadcrumb from "../../components/layout/Breadcrumb";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -7,8 +7,9 @@ import Badge from "../../components/ui/Badge";
 import EmptyState from "../../components/ui/EmptyState";
 import { FieldGroup, Input, Select } from "../../components/ui/Field";
 import { useExamData } from "../../hooks/useExamData";
-import { createExam } from "../../lib/examStore";
+import { createExam, deleteExam, updateExam } from "../../lib/examStore";
 import { useCourses } from "../../hooks/useUserData";
+import { getCourse } from "../../lib/catalog";
 import { DIFFICULTY_LABEL, QUESTION_TYPE_LABEL, type Question, type QuestionType } from "../../types/exam";
 
 const EXAM_TYPES: QuestionType[] = ["multiple_choice", "true_false", "short_answer"];
@@ -28,8 +29,11 @@ function shuffle<T>(arr: T[]): T[] {
 
 export default function CreateExamPage() {
   const navigate = useNavigate();
+  const { examId } = useParams();
   const courses = useCourses();
-  const { questions } = useExamData();
+  const { questions, exams } = useExamData();
+  const editingExam = examId ? exams.find((e) => e.id === examId) : undefined;
+  const isEditMode = Boolean(examId);
 
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [title, setTitle] = useState("");
@@ -42,6 +46,19 @@ export default function CreateExamPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formCounts, setFormCounts] = useState<FormCounts>(emptyFormCounts);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+
+  // Nạp dữ liệu đề cũ vào form khi vào chế độ sửa (/exams/edit/:examId).
+  useEffect(() => {
+    if (!editingExam) return;
+    setCourseId(editingExam.courseId);
+    setTitle(editingExam.title);
+    setTopic(editingExam.topic ?? "all");
+    setTimeLimit(editingExam.timeLimitMinutes ?? 0);
+    setShuffleQuestions(editingExam.shuffleQuestions);
+    setShuffleAnswers(editingExam.shuffleAnswers);
+    setSelectedIds(editingExam.questionIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingExam?.id]);
 
   const topics = useMemo(
     () => Array.from(new Set(questions.filter((q) => q.courseId === courseId).map((q) => q.topic))),
@@ -117,7 +134,7 @@ export default function CreateExamPage() {
 
   function handleCreate() {
     if (!canCreate) return;
-    const exam = createExam({
+    const payload = {
       courseId,
       title: title.trim(),
       topic: topic !== "all" ? topic : undefined,
@@ -125,14 +142,33 @@ export default function CreateExamPage() {
       timeLimitMinutes: timeLimit > 0 ? timeLimit : null,
       shuffleQuestions,
       shuffleAnswers,
-    });
-    navigate(`/exams/${exam.id}`);
+    };
+    if (isEditMode && examId) {
+      updateExam(examId, payload);
+      navigate(`/exams/${examId}`);
+    } else {
+      const exam = createExam(payload);
+      navigate(`/exams/${exam.id}`);
+    }
+  }
+
+  function handleDeleteExam(id: string, examTitle: string) {
+    if (!confirm(`Xóa đề "${examTitle}"? Không thể hoàn tác (không ảnh hưởng câu hỏi trong ngân hàng).`)) return;
+    deleteExam(id);
+    if (id === examId) navigate("/exams/create");
   }
 
   return (
     <div className="container-page py-8 space-y-6">
-      <Breadcrumb items={[{ label: "Kiểm tra", to: "/exams" }, { label: "Tạo đề kiểm tra" }]} />
-      <h1 className="text-xl font-display font-bold text-ash-200">Tạo bài kiểm tra</h1>
+      <Breadcrumb
+        items={[
+          { label: "Kiểm tra", to: "/exams" },
+          { label: isEditMode ? "Sửa đề kiểm tra" : "Tạo đề kiểm tra" },
+        ]}
+      />
+      <h1 className="text-xl font-display font-bold text-ash-200">
+        {isEditMode ? `Sửa đề: ${editingExam?.title ?? ""}` : "Tạo bài kiểm tra"}
+      </h1>
 
       <Card className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -308,8 +344,54 @@ export default function CreateExamPage() {
       </div>
 
       <Button size="md" onClick={handleCreate} disabled={!canCreate}>
-        Tạo đề ({selectedIds.length} câu)
+        {isEditMode ? `💾 Lưu thay đổi (${selectedIds.length} câu)` : `Tạo đề (${selectedIds.length} câu)`}
       </Button>
+
+      {!isEditMode && (
+        <section className="pt-4 border-t border-ink-700">
+          <h2 className="text-sm font-display font-semibold text-ash-200 mb-3">
+            📋 Đề đã tạo ({exams.length})
+          </h2>
+          {exams.length === 0 ? (
+            <p className="text-sm text-ash-500">Chưa có đề nào.</p>
+          ) : (
+            <div className="space-y-2">
+              {exams
+                .slice()
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .map((exam) => {
+                  const course = getCourse(exam.courseId);
+                  return (
+                    <div
+                      key={exam.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink-600 bg-ink-800/40 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge>{course?.shortName ?? "?"}</Badge>
+                          {exam.topic && <Badge tone="cue">{exam.topic}</Badge>}
+                        </div>
+                        <p className="text-sm text-ash-200 font-medium truncate">{exam.title}</p>
+                        <p className="text-xs text-ash-500">
+                          {exam.questionIds.length} câu
+                          {exam.timeLimitMinutes ? ` · ${exam.timeLimitMinutes} phút` : " · không giới hạn"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button variant="secondary" size="sm" onClick={() => navigate(`/exams/edit/${exam.id}`)}>
+                          Sửa
+                        </Button>
+                        <Button variant="danger" size="sm" onClick={() => handleDeleteExam(exam.id, exam.title)}>
+                          Xóa
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
