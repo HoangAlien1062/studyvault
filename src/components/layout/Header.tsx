@@ -1,8 +1,11 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../hooks/useAuth";
+import { signOut } from "../../lib/auth";
 
 export default function Header() {
   const navigate = useNavigate();
+  const { user, profile, loading } = useAuth();
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
 
@@ -59,10 +62,33 @@ export default function Header() {
           <div className="h-9 w-9 rounded-full bg-ink-700 border border-ink-600 flex items-center justify-center text-sm">
             👤
           </div>
-          <div className="hidden md:block leading-tight">
-            <p className="text-sm font-medium text-ash-200">Học sinh</p>
-            <p className="text-xs text-ash-500">Lớp 12</p>
-          </div>
+          {loading ? null : user ? (
+            <>
+              <div className="hidden md:block leading-tight">
+                <p className="text-sm font-medium text-ash-200 truncate max-w-[140px]">
+                  {profile?.display_name ?? user.email}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    signOut();
+                    navigate("/");
+                  }}
+                  className="text-xs text-ash-500 hover:text-ash-300"
+                >
+                  Đăng xuất
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="text-sm font-medium text-cue hover:underline"
+            >
+              Đăng nhập
+            </button>
+          )}
         </div>
       </div>
     </header>

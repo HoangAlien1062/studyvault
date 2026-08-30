@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Breadcrumb from "../../components/layout/Breadcrumb";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import EmptyState from "../../components/ui/EmptyState";
 import { FieldGroup, Input, Textarea } from "../../components/ui/Field";
 import { useCourses } from "../../hooks/useUserData";
-import { useAdminAuth } from "../../hooks/useAdminAuth";
+import { signOut } from "../../lib/auth";
 import { countCourseChapters, countCourseLessons } from "../../lib/catalog";
 import { createCourse, deleteCourse, resetToDefaultContent, updateCourse } from "../../lib/contentStore";
 import type { Course } from "../../types";
@@ -29,7 +29,7 @@ const emptyForm: CourseForm = {
 
 export default function AdminCourses() {
   const courses = useCourses();
-  const { lock } = useAdminAuth();
+  const navigate = useNavigate();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<CourseForm>(emptyForm);
@@ -106,8 +106,16 @@ export default function AdminCourses() {
           <Button size="sm" icon="+" onClick={startCreate}>
             Thêm môn học
           </Button>
-          <Button variant="ghost" size="sm" onClick={lock} title="Khóa lại khu vực quản trị">
-            🔒 Khóa
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              signOut();
+              navigate("/");
+            }}
+            title="Đăng xuất"
+          >
+            🔒 Đăng xuất
           </Button>
         </div>
       </div>

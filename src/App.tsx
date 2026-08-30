@@ -11,6 +11,7 @@ import Favorites from "./pages/Favorites";
 import History from "./pages/History";
 import Progress from "./pages/Progress";
 import ExamsPage from "./pages/exams/ExamsPage";
+import LoginPage from "./pages/LoginPage";
 import QuestionsPage from "./pages/exams/QuestionsPage";
 import CreateExamPage from "./pages/exams/CreateExamPage";
 import TakeExamPage from "./pages/exams/TakeExamPage";
@@ -46,6 +47,7 @@ export default function App() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<Home />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/courses/:courseId" element={<CourseDetail />} />
         <Route path="/courses/:courseId/teachers" element={<CourseDetail />} />

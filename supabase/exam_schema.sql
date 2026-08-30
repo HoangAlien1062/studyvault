@@ -58,3 +58,49 @@ drop policy if exists "Public delete exam documents" on storage.objects;
 create policy "Public delete exam documents"
   on storage.objects for delete
   using (bucket_id = 'exam-documents');
+
+-- ============================================================
+-- BƯỚC 1 CỦA KẾ HOẠCH LỚN — Supabase Auth thật + bảng profiles
+-- (chưa migrate ngân hàng câu hỏi/đề sang owner_id — đó là bước 2
+-- riêng, chưa làm ở đây để tránh phá dữ liệu hiện có).
+-- ============================================================
+
+create table if not exists public.profiles (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  display_name text,
+  is_admin boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+drop policy if exists "Profiles are viewable by everyone" on public.profiles;
+create policy "Profiles are viewable by everyone"
+  on public.profiles for select
+  using (true);
+
+drop policy if exists "Users can update own profile" on public.profiles;
+create policy "Users can update own profile"
+  on public.profiles for update
+  using (auth.uid() = user_id);
+
+-- Tự tạo 1 dòng profiles ngay khi có user mới đăng ký qua Supabase Auth.
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (user_id, display_name)
+  values (new.id, coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)));
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- ⚠️ SAU KHI bạn đăng ký tài khoản đầu tiên qua trang /login, chạy dòng
+-- dưới đây (đổi email cho đúng) để cấp quyền admin cho tài khoản đó:
+--
+--   update public.profiles set is_admin = true
+--   where user_id = (select id from auth.users where email = 'ban@vidu.com');
