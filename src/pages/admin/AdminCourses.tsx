@@ -106,6 +106,12 @@ export default function AdminCourses() {
           <Button size="sm" icon="+" onClick={startCreate}>
             Thêm môn học
           </Button>
+          <Button size="sm" variant="secondary" onClick={() => navigate("/admin/users")}>
+            👥 Người dùng
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => navigate("/exams/questions")}>
+            📝 Ngân hàng câu hỏi
+          </Button>
           <Button
             variant="ghost"
             size="sm"

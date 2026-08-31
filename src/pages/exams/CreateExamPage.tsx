@@ -8,8 +8,9 @@ import EmptyState from "../../components/ui/EmptyState";
 import { FieldGroup, Input, Select } from "../../components/ui/Field";
 import { useExamData } from "../../hooks/useExamData";
 import { createExam, deleteExam, updateExam } from "../../lib/examStore";
-import { useCourses } from "../../hooks/useUserData";
-import { getCourse } from "../../lib/catalog";
+import { useCoursesForExams } from "../../hooks/useUserData";
+import { useAuth } from "../../hooks/useAuth";
+import { getCourse, OTHER_COURSE_ID } from "../../lib/catalog";
 import { DIFFICULTY_LABEL, QUESTION_TYPE_LABEL, type Question, type QuestionType } from "../../types/exam";
 
 const EXAM_TYPES: QuestionType[] = ["multiple_choice", "true_false", "short_answer"];
@@ -30,7 +31,8 @@ function shuffle<T>(arr: T[]): T[] {
 export default function CreateExamPage() {
   const navigate = useNavigate();
   const { examId } = useParams();
-  const courses = useCourses();
+  const courses = useCoursesForExams();
+  const { user, isAdmin } = useAuth();
   const { questions, exams } = useExamData();
   const editingExam = examId ? exams.find((e) => e.id === examId) : undefined;
   const isEditMode = Boolean(examId);
@@ -43,6 +45,7 @@ export default function CreateExamPage() {
   const [timeLimit, setTimeLimit] = useState(30);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [shuffleAnswers, setShuffleAnswers] = useState(true);
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formCounts, setFormCounts] = useState<FormCounts>(emptyFormCounts);
   const [formErrors, setFormErrors] = useState<string[]>([]);
@@ -56,23 +59,32 @@ export default function CreateExamPage() {
     setTimeLimit(editingExam.timeLimitMinutes ?? 0);
     setShuffleQuestions(editingExam.shuffleQuestions);
     setShuffleAnswers(editingExam.shuffleAnswers);
+    setVisibility(editingExam.visibility ?? "public");
     setSelectedIds(editingExam.questionIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingExam?.id]);
 
   const topics = useMemo(
-    () => Array.from(new Set(questions.filter((q) => q.courseId === courseId).map((q) => q.topic))),
+    () =>
+      Array.from(
+        new Set(
+          questions
+            .filter((q) => (courseId === OTHER_COURSE_ID ? true : q.courseId === courseId))
+            .map((q) => q.topic)
+        )
+      ),
     [questions, courseId]
   );
 
   // Pool theo môn/chủ đề/độ khó, KHÔNG lọc theo "Loại câu hỏi" phía dưới —
   // dùng riêng cho tính năng "Random theo cấu trúc đề" để biết còn bao
   // nhiêu câu mỗi loại có thể random, bất kể ô loại câu hỏi đang bật/tắt.
+  // Chọn môn "Khác" = trộn câu hỏi từ MỌI môn (đề nhiều môn).
   const poolByType = useMemo(() => {
     const map: Record<QuestionType, Question[]> = { multiple_choice: [], true_false: [], short_answer: [] };
     questions.forEach((q) => {
       if (q.status !== "published") return;
-      if (q.courseId !== courseId) return;
+      if (courseId !== OTHER_COURSE_ID && q.courseId !== courseId) return;
       if (topic !== "all" && q.topic !== topic) return;
       if (difficulty !== "all" && q.difficulty !== difficulty) return;
       map[q.type].push(q);
@@ -110,13 +122,15 @@ export default function CreateExamPage() {
       // Chỉ câu đã "published" mới được đưa vào đề chính thức (mục 55 —
       // câu AI tạo (draft) phải được duyệt ở Ngân hàng câu hỏi trước).
       if (q.status !== "published") return false;
-      if (q.courseId !== courseId) return false;
+      // Chỉ dùng được câu công khai, hoặc câu riêng tư của chính mình.
+      if (q.visibility === "private" && q.ownerId !== user?.id && !isAdmin) return false;
+      if (courseId !== OTHER_COURSE_ID && q.courseId !== courseId) return false;
       if (topic !== "all" && q.topic !== topic) return false;
       if (!types.includes(q.type)) return false;
       if (difficulty !== "all" && q.difficulty !== difficulty) return false;
       return true;
     });
-  }, [questions, courseId, topic, types, difficulty]);
+  }, [questions, courseId, topic, types, difficulty, user?.id, isAdmin]);
 
   function toggleType(t: QuestionType) {
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -134,14 +148,23 @@ export default function CreateExamPage() {
 
   function handleCreate() {
     if (!canCreate) return;
+    // Nếu câu hỏi được chọn thuộc nhiều môn khác nhau (trường hợp chọn
+    // môn "Khác" rồi tự chọn tay từ nhiều môn), tự động xếp đề vào "Khác".
+    const distinctCourseIds = new Set(
+      selectedIds.map((id) => questions.find((q) => q.id === id)?.courseId).filter(Boolean)
+    );
+    const finalCourseId = distinctCourseIds.size > 1 ? OTHER_COURSE_ID : courseId;
+
     const payload = {
-      courseId,
+      courseId: finalCourseId,
       title: title.trim(),
       topic: topic !== "all" ? topic : undefined,
       questionIds: selectedIds,
       timeLimitMinutes: timeLimit > 0 ? timeLimit : null,
       shuffleQuestions,
       shuffleAnswers,
+      visibility,
+      ownerId: editingExam?.ownerId ?? user?.id,
     };
     if (isEditMode && examId) {
       updateExam(examId, payload);
@@ -157,6 +180,14 @@ export default function CreateExamPage() {
     deleteExam(id);
     if (id === examId) navigate("/exams/create");
   }
+
+  function canManageExam(exam: (typeof exams)[number]): boolean {
+    return isAdmin || exam.ownerId === user?.id;
+  }
+
+  const visibleExams = isAdmin
+    ? exams
+    : exams.filter((e) => e.visibility !== "private" || e.ownerId === user?.id);
 
   return (
     <div className="container-page py-8 space-y-6">
@@ -253,6 +284,13 @@ export default function CreateExamPage() {
             Trộn đáp án
           </label>
         </div>
+
+        <FieldGroup label="Quyền xem đề">
+          <Select value={visibility} onChange={(e) => setVisibility(e.target.value as "public" | "private")}>
+            <option value="public">🌍 Công khai — mọi người đăng nhập đều làm được</option>
+            <option value="private">🔒 Riêng tư — chỉ mình bạn làm được</option>
+          </Select>
+        </FieldGroup>
       </Card>
 
       <Card className="space-y-4">
@@ -350,17 +388,18 @@ export default function CreateExamPage() {
       {!isEditMode && (
         <section className="pt-4 border-t border-ink-700">
           <h2 className="text-sm font-display font-semibold text-ash-200 mb-3">
-            📋 Đề đã tạo ({exams.length})
+            📋 {isAdmin ? "Đề đã tạo (tất cả)" : "Đề của tôi"} ({visibleExams.length})
           </h2>
-          {exams.length === 0 ? (
+          {visibleExams.length === 0 ? (
             <p className="text-sm text-ash-500">Chưa có đề nào.</p>
           ) : (
             <div className="space-y-2">
-              {exams
+              {visibleExams
                 .slice()
                 .sort((a, b) => b.createdAt - a.createdAt)
                 .map((exam) => {
                   const course = getCourse(exam.courseId);
+                  const manageable = canManageExam(exam);
                   return (
                     <div
                       key={exam.id}
@@ -370,6 +409,8 @@ export default function CreateExamPage() {
                         <div className="flex items-center gap-2 mb-1">
                           <Badge>{course?.shortName ?? "?"}</Badge>
                           {exam.topic && <Badge tone="cue">{exam.topic}</Badge>}
+                          {exam.visibility === "private" && <Badge>🔒 Riêng tư</Badge>}
+                          {exam.ownerId === user?.id && <Badge tone="cue">Của bạn</Badge>}
                         </div>
                         <p className="text-sm text-ash-200 font-medium truncate">{exam.title}</p>
                         <p className="text-xs text-ash-500">
@@ -378,12 +419,20 @@ export default function CreateExamPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <Button variant="secondary" size="sm" onClick={() => navigate(`/exams/edit/${exam.id}`)}>
-                          Sửa
-                        </Button>
-                        <Button variant="danger" size="sm" onClick={() => handleDeleteExam(exam.id, exam.title)}>
-                          Xóa
-                        </Button>
+                        {manageable ? (
+                          <>
+                            <Button variant="secondary" size="sm" onClick={() => navigate(`/exams/edit/${exam.id}`)}>
+                              Sửa
+                            </Button>
+                            <Button variant="danger" size="sm" onClick={() => handleDeleteExam(exam.id, exam.title)}>
+                              Xóa
+                            </Button>
+                          </>
+                        ) : (
+                          <Button size="sm" onClick={() => navigate(`/exams/${exam.id}`)}>
+                            Làm bài
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );

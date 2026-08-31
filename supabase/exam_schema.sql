@@ -92,6 +92,17 @@ create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = user_id);
 
+-- Admin được sửa profile (cấp/thu quyền) của bất kỳ ai khác.
+drop policy if exists "Admins can update any profile" on public.profiles;
+create policy "Admins can update any profile"
+  on public.profiles for update
+  using (
+    exists (
+      select 1 from public.profiles admin_check
+      where admin_check.user_id = auth.uid() and admin_check.is_admin = true
+    )
+  );
+
 -- Tự tạo 1 dòng profiles ngay khi có user mới đăng ký qua Supabase Auth.
 create or replace function public.handle_new_user()
 returns trigger as $$

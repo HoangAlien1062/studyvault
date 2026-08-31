@@ -9,11 +9,9 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { to: "/", label: "Trang chủ", icon: "🏠" },
-  { to: "/courses", label: "Môn học", icon: "📚" },
   { to: "/exams", label: "Kiểm tra", icon: "📝" },
-  { to: "/favorites", label: "Đã lưu", icon: "⭐" },
-  { to: "/history", label: "Lịch sử", icon: "🕘" },
-  { to: "/progress", label: "Tiến độ", icon: "📊" },
+  { to: "/exams/leaderboard", label: "Xếp hạng", icon: "🏆" },
+  { to: "/exams/history", label: "Lịch sử", icon: "🕘" },
 ];
 
 interface SidebarProps {

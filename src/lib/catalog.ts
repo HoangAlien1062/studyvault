@@ -13,8 +13,28 @@ export function getAllCourses(): Course[] {
   return getCourses();
 }
 
+// Môn "Khác" — dùng cho đề/câu hỏi không thuộc riêng 1 môn cụ thể (vd đề
+// trộn nhiều môn). Không lưu trong dữ liệu khóa học video, chỉ là 1 mục
+// ảo để hiển thị nhất quán ở khu vực Kiểm tra.
+export const OTHER_COURSE_ID = "other";
+const OTHER_COURSE: Course = {
+  id: OTHER_COURSE_ID,
+  name: "Khác",
+  shortName: "Khác",
+  description: "Câu hỏi/đề không thuộc riêng một môn học cụ thể.",
+  icon: "❓",
+  color: "#8A8F98",
+  teachers: [],
+};
+
 export function getCourse(courseId: string): Course | undefined {
+  if (courseId === OTHER_COURSE_ID) return OTHER_COURSE;
   return getCourses().find((c) => c.id === courseId);
+}
+
+/** Danh sách môn cho khu vực Kiểm tra: các môn thật + mục "Khác" ở cuối. */
+export function getCoursesForExams(): Course[] {
+  return [...getCourses(), OTHER_COURSE];
 }
 
 export function getTeacher(courseId: string, teacherId: string): Teacher | undefined {

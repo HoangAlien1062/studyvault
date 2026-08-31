@@ -9,9 +9,10 @@ const DIFFICULTY_TONE = { easy: "done", medium: "cue", hard: "live" } as const;
 
 interface QuestionCardProps {
   question: Question;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   onApprove?: () => void;
+  isOwner?: boolean;
   selectable?: boolean;
   selected?: boolean;
   onToggleSelected?: () => void;
@@ -22,6 +23,7 @@ export default function QuestionCard({
   onEdit,
   onDelete,
   onApprove,
+  isOwner,
   selectable,
   selected,
   onToggleSelected,
@@ -49,6 +51,8 @@ export default function QuestionCard({
         {question.source === "ai" && <Badge tone="live">🧠 AI</Badge>}
         {question.status === "draft" && <Badge tone="live">Chưa duyệt</Badge>}
         {question.status === "reviewed" && <Badge tone="cue">Đã xem, chưa publish</Badge>}
+        {question.visibility === "private" && <Badge>🔒 Riêng tư</Badge>}
+        {isOwner && <Badge tone="cue">Của bạn</Badge>}
       </div>
 
       <p className="text-sm text-ash-200 leading-relaxed">
@@ -96,17 +100,22 @@ export default function QuestionCard({
       )}
 
       <div className="flex items-center gap-2 pt-1">
-        <Button variant="secondary" size="sm" onClick={onEdit}>
-          Sửa
-        </Button>
+        {onEdit && (
+          <Button variant="secondary" size="sm" onClick={onEdit}>
+            Sửa
+          </Button>
+        )}
         {question.status !== "published" && onApprove && (
           <Button variant="primary" size="sm" onClick={onApprove}>
             ✓ Duyệt & đưa vào đề
           </Button>
         )}
-        <Button variant="danger" size="sm" onClick={onDelete}>
-          Xóa
-        </Button>
+        {onDelete && (
+          <Button variant="danger" size="sm" onClick={onDelete}>
+            Xóa
+          </Button>
+        )}
+        {!onEdit && !onDelete && <p className="text-xs text-ash-500">Câu hỏi của người dùng khác</p>}
       </div>
     </Card>
   );

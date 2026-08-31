@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
 import EmptyState from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Field";
 import { useExamData, useExamDataReady } from "../hooks/useExamData";
+import { useAuth } from "../hooks/useAuth";
 import { getCourse } from "../lib/catalog";
 
 // Trang chủ giờ chỉ xoay quanh Kiểm tra — không còn phần video/khóa
@@ -15,22 +16,30 @@ export default function Home() {
   const navigate = useNavigate();
   const ready = useExamDataReady();
   const { exams } = useExamData();
-  const [query, setQuery] = useState("");
+  const { user, isAdmin } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [courseFilter, setCourseFilter] = useState("all");
 
+  // Chỉ hiện đề công khai, hoặc đề riêng tư của chính mình. Admin thấy hết.
+  const visibleExams = useMemo(() => {
+    if (isAdmin) return exams;
+    return exams.filter((e) => e.visibility !== "private" || e.ownerId === user?.id);
+  }, [exams, isAdmin, user?.id]);
+
   const courseOptions = useMemo(() => {
-    const ids = Array.from(new Set(exams.map((e) => e.courseId)));
+    const ids = Array.from(new Set(visibleExams.map((e) => e.courseId)));
     return ids.map((id) => getCourse(id)).filter((c): c is NonNullable<typeof c> => Boolean(c));
-  }, [exams]);
+  }, [visibleExams]);
 
   const filteredExams = useMemo(() => {
-    return exams.filter((e) => {
+    return visibleExams.filter((e) => {
       if (courseFilter !== "all" && e.courseId !== courseFilter) return false;
       const course = getCourse(e.courseId);
       const haystack = `${e.title} ${e.topic ?? ""} ${course?.name ?? ""}`.toLowerCase();
       return haystack.includes(query.toLowerCase());
     });
-  }, [exams, query, courseFilter]);
+  }, [visibleExams, query, courseFilter]);
 
   return (
     <div className="container-page py-8 sm:py-12 space-y-8">
@@ -41,7 +50,14 @@ export default function Home() {
       </section>
 
       {/* Gộp mọi lối tắt vào một khu vực duy nhất */}
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <section className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
+        <button
+          onClick={() => navigate("/exams/create")}
+          className="flex flex-col items-center gap-2 rounded-xl border border-cue/40 bg-cue/10 px-4 py-5 hover:border-cue/70 hover:bg-cue/15 transition-colors"
+        >
+          <span className="text-2xl">➕</span>
+          <span className="text-sm font-medium text-cue">Tạo đề mới</span>
+        </button>
         <button
           onClick={() => navigate("/exams/leaderboard")}
           className="flex flex-col items-center gap-2 rounded-xl border border-ink-600 bg-ink-800/40 px-4 py-5 hover:border-cue/50 hover:bg-ink-800/70 transition-colors"
@@ -135,6 +151,7 @@ export default function Home() {
                   <div className="flex items-center gap-2">
                     <Badge>{course?.shortName ?? "?"}</Badge>
                     {exam.topic && <Badge tone="cue">{exam.topic}</Badge>}
+                    {exam.visibility === "private" && <Badge>🔒 Riêng tư</Badge>}
                   </div>
                   <h3 className="font-display font-semibold text-ash-200 leading-snug">{exam.title}</h3>
                   <p className="text-xs text-ash-500">

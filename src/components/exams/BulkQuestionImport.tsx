@@ -126,10 +126,11 @@ function parseLine(raw: string, line: number, type: QuestionType): ParsedRow {
 
 interface BulkQuestionImportProps {
   courses: Course[];
+  currentUserId?: string;
   onDone: () => void;
 }
 
-export default function BulkQuestionImport({ courses, onDone }: BulkQuestionImportProps) {
+export default function BulkQuestionImport({ courses, currentUserId, onDone }: BulkQuestionImportProps) {
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [topic, setTopic] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
@@ -160,6 +161,8 @@ export default function BulkQuestionImport({ courses, onDone }: BulkQuestionImpo
         difficulty,
         source: "user" as const,
         status: "published" as const,
+        ownerId: currentUserId,
+        visibility: "public" as const,
       };
       if (type === "multiple_choice" && row.options && row.correctIndex !== undefined) {
         createQuestion({

@@ -64,6 +64,8 @@ export interface Question {
   source: QuestionSource;
   status: QuestionStatus;
   documentId?: string;
+  ownerId?: string; // user_id của người tạo — dùng để phân quyền sửa/xóa
+  visibility?: "public" | "private"; // mặc định coi như "public" nếu không set (dữ liệu cũ)
   createdAt: number;
 }
 
@@ -76,6 +78,8 @@ export interface Exam {
   timeLimitMinutes: number | null; // null = không giới hạn
   shuffleQuestions: boolean;
   shuffleAnswers: boolean;
+  ownerId?: string; // user_id của người tạo — dùng để phân quyền sửa/xóa
+  visibility?: "public" | "private"; // mặc định coi như "public" nếu không set (dữ liệu cũ)
   createdAt: number;
 }
 

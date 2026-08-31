@@ -29,10 +29,11 @@ interface GeneratedQuestion {
 
 interface AIQuestionGeneratorProps {
   courses: Course[];
+  currentUserId?: string;
   onDone: () => void;
 }
 
-export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGeneratorProps) {
+export default function AIQuestionGenerator({ courses, currentUserId, onDone }: AIQuestionGeneratorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -281,6 +282,8 @@ export default function AIQuestionGenerator({ courses, onDone }: AIQuestionGener
         source: "ai",
         status: "draft", // mục 55: AI tạo luôn ở trạng thái draft, phải duyệt mới đưa vào đề chính thức
         documentId: documentId ?? undefined,
+        ownerId: currentUserId,
+        visibility: "public",
       };
       createQuestion(payload);
     });

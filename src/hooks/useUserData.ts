@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { STORAGE_EVENT, notifyStorageChange, storage } from "../lib/storage";
 import type { HistoryEntry, ProgressState } from "../lib/storage";
 import { getCourses, isContentReady } from "../lib/contentStore";
+import { getCoursesForExams } from "../lib/catalog";
 import type { Course } from "../types";
 
 function useStorageSlice<T>(getter: () => T): T {
@@ -101,6 +102,11 @@ export function useProgress() {
 // ngay khi có thay đổi mà không cần load lại trang.
 export function useCourses(): Course[] {
   return useStorageSlice(getCourses);
+}
+
+/** Danh sách môn cho khu vực Kiểm tra — gồm các môn thật + mục "Khác". */
+export function useCoursesForExams(): Course[] {
+  return useStorageSlice(getCoursesForExams);
 }
 
 export function useContentReady(): boolean {

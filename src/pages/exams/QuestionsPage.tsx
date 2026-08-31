@@ -9,7 +9,8 @@ import BulkQuestionImport from "../../components/exams/BulkQuestionImport";
 import AIQuestionGenerator from "../../components/exams/AIQuestionGenerator";
 import { useExamData, useExamDataReady } from "../../hooks/useExamData";
 import { createQuestion, deleteQuestion, deleteQuestions, updateQuestion } from "../../lib/examStore";
-import { useCourses } from "../../hooks/useUserData";
+import { useCoursesForExams } from "../../hooks/useUserData";
+import { useAuth } from "../../hooks/useAuth";
 import type { Question } from "../../types/exam";
 
 type AddMode = "bulk" | "single" | "ai";
@@ -17,12 +18,14 @@ type AddMode = "bulk" | "single" | "ai";
 export default function QuestionsPage() {
   const ready = useExamDataReady();
   const { questions } = useExamData();
-  const courses = useCourses();
+  const courses = useCoursesForExams();
+  const { user, isAdmin } = useAuth();
 
   const [courseFilter, setCourseFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [scopeFilter, setScopeFilter] = useState<"all" | "mine">("all");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Question | null>(null);
   const [creating, setCreating] = useState(false);
@@ -30,8 +33,21 @@ export default function QuestionsPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Ai cũng thấy được câu hỏi công khai (visibility !== "private"); câu
+  // hỏi riêng tư chỉ chủ sở hữu và admin thấy. Dữ liệu cũ chưa có
+  // visibility/ownerId được coi như công khai (tương thích ngược).
+  const visibleQuestions = useMemo(() => {
+    if (isAdmin) return questions;
+    return questions.filter((q) => q.visibility !== "private" || q.ownerId === user?.id);
+  }, [questions, isAdmin, user?.id]);
+
+  function canManage(q: Question): boolean {
+    return isAdmin || q.ownerId === user?.id;
+  }
+
   const filtered = useMemo(() => {
-    return questions.filter((q) => {
+    return visibleQuestions.filter((q) => {
+      if (scopeFilter === "mine" && q.ownerId !== user?.id) return false;
       if (courseFilter !== "all" && q.courseId !== courseFilter) return false;
       if (typeFilter !== "all" && q.type !== typeFilter) return false;
       if (difficultyFilter !== "all" && q.difficulty !== difficultyFilter) return false;
@@ -39,7 +55,7 @@ export default function QuestionsPage() {
       if (query && !`${q.question} ${q.topic}`.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [questions, courseFilter, typeFilter, difficultyFilter, statusFilter, query]);
+  }, [visibleQuestions, scopeFilter, courseFilter, typeFilter, difficultyFilter, statusFilter, query, user?.id]);
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -160,13 +176,14 @@ export default function QuestionsPage() {
           )}
 
           {creating && !editing && addMode === "ai" ? (
-            <AIQuestionGenerator courses={courses} onDone={() => setCreating(false)} />
+            <AIQuestionGenerator courses={courses} currentUserId={user?.id} onDone={() => setCreating(false)} />
           ) : creating && !editing && addMode === "bulk" ? (
             <BulkQuestionImport courses={courses} onDone={() => setCreating(false)} />
           ) : (
             <QuestionEditor
               courses={courses}
               initial={editing ?? undefined}
+              currentUserId={user?.id}
               onCancel={() => {
                 setEditing(null);
                 setCreating(false);
@@ -217,13 +234,34 @@ export default function QuestionsPage() {
             </Select>
           </div>
 
+          <div className="flex items-center gap-1 rounded-lg bg-ink-800 border border-ink-600 p-1 w-fit">
+            <button
+              type="button"
+              onClick={() => setScopeFilter("all")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                scopeFilter === "all" ? "bg-cue text-ink-950" : "text-ash-400 hover:text-ash-200"
+              }`}
+            >
+              Tất cả (công khai)
+            </button>
+            <button
+              type="button"
+              onClick={() => setScopeFilter("mine")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                scopeFilter === "mine" ? "bg-cue text-ink-950" : "text-ash-400 hover:text-ash-200"
+              }`}
+            >
+              Của tôi
+            </button>
+          </div>
+
           {!ready ? (
             <p className="text-sm text-ash-500">Đang tải...</p>
           ) : filtered.length === 0 ? (
             <EmptyState
               icon="🧠"
               title="Ngân hàng câu hỏi đang trống"
-              description="Thêm câu hỏi thủ công, hoặc dùng AI tạo từ tài liệu (sắp ra mắt)."
+              description="Thêm câu hỏi thủ công, hoặc dùng AI tạo từ tài liệu."
               action={<Button onClick={() => setCreating(true)}>+ Thêm câu hỏi</Button>}
             />
           ) : (
@@ -232,11 +270,20 @@ export default function QuestionsPage() {
                 <QuestionCard
                   key={q.id}
                   question={q}
-                  onEdit={() => setEditing(q)}
-                  onDelete={() => {
-                    if (confirm("Xóa câu hỏi này?")) deleteQuestion(q.id);
-                  }}
-                  onApprove={() => updateQuestion(q.id, { status: "published" })}
+                  onEdit={canManage(q) ? () => setEditing(q) : undefined}
+                  onDelete={
+                    canManage(q)
+                      ? () => {
+                          if (confirm("Xóa câu hỏi này?")) deleteQuestion(q.id);
+                        }
+                      : undefined
+                  }
+                  onApprove={
+                    isAdmin && q.status !== "published"
+                      ? () => updateQuestion(q.id, { status: "published" })
+                      : undefined
+                  }
+                  isOwner={q.ownerId === user?.id}
                   selectable={selectMode}
                   selected={selectedIds.has(q.id)}
                   onToggleSelected={() => toggleSelected(q.id)}

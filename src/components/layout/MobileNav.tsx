@@ -2,9 +2,9 @@ import { NavLink } from "react-router-dom";
 
 const items = [
   { to: "/", label: "Trang chủ", icon: "🏠" },
-  { to: "/courses", label: "Môn học", icon: "📚" },
-  { to: "/exams", label: "Kiểm tra", icon: "📝" },
-  { to: "/search", label: "Tìm kiếm", icon: "🔍" },
+  { to: "/exams", label: "Đề thi", icon: "📝" },
+  { to: "/exams/leaderboard", label: "Xếp hạng", icon: "🏆" },
+  { to: "/exams/history", label: "Lịch sử", icon: "🕘" },
   { to: "/admin", label: "Cài đặt", icon: "⚙" },
 ];
 

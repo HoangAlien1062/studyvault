@@ -17,11 +17,12 @@ const emptyStatements = (): TrueFalseStatement[] => [
 interface QuestionEditorProps {
   courses: Course[];
   initial?: Question;
+  currentUserId?: string;
   onCancel: () => void;
   onSave: (input: QuestionInput) => void;
 }
 
-export default function QuestionEditor({ courses, initial, onCancel, onSave }: QuestionEditorProps) {
+export default function QuestionEditor({ courses, initial, currentUserId, onCancel, onSave }: QuestionEditorProps) {
   const [courseId, setCourseId] = useState(initial?.courseId ?? courses[0]?.id ?? "");
   const [topic, setTopic] = useState(initial?.topic ?? "");
   const [type, setType] = useState<QuestionType>(initial?.type ?? "multiple_choice");
@@ -45,6 +46,7 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
     (initial?.acceptedAnswers ?? [""]).join(", ")
   );
   const [imageUrl, setImageUrl] = useState<string | undefined>(initial?.imageUrl);
+  const [visibility, setVisibility] = useState<"public" | "private">(initial?.visibility ?? "public");
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
@@ -80,6 +82,8 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
       source: initial?.source ?? ("user" as const),
       status: initial?.status ?? ("published" as const),
       documentId: initial?.documentId,
+      ownerId: initial?.ownerId ?? currentUserId,
+      visibility,
     };
     if (type === "multiple_choice") return { ...base, options, correctAnswer };
     if (type === "true_false") return { ...base, statements };
@@ -305,6 +309,13 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
           />
         </FieldGroup>
       )}
+
+      <FieldGroup label="Quyền xem">
+        <Select value={visibility} onChange={(e) => setVisibility(e.target.value as "public" | "private")}>
+          <option value="public">🌍 Công khai — mọi người đăng nhập đều thấy</option>
+          <option value="private">🔒 Riêng tư — chỉ mình bạn thấy</option>
+        </Select>
+      </FieldGroup>
 
       <FieldGroup label="Giải thích (tùy chọn)">
         <Textarea rows={2} value={explanation} onChange={(e) => setExplanation(e.target.value)} />
