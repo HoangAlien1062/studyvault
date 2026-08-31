@@ -1,103 +1,154 @@
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { siteConfig } from "../config/site";
-import SearchBar from "../components/search/SearchBar";
-import CourseGrid from "../components/courses/CourseGrid";
-import LessonCard from "../components/lessons/LessonCard";
+import Card from "../components/ui/Card";
+import Button from "../components/ui/Button";
+import Badge from "../components/ui/Badge";
 import EmptyState from "../components/ui/EmptyState";
-import { getAllCourses, findLessonWithContext } from "../lib/catalog";
-import { useHistory, useProgress } from "../hooks/useUserData";
+import { Input } from "../components/ui/Field";
+import { useExamData, useExamDataReady } from "../hooks/useExamData";
+import { getCourse } from "../lib/catalog";
 
+// Trang chủ giờ chỉ xoay quanh Kiểm tra — không còn phần video/khóa
+// học/tìm kiếm chung nữa (những phần đó vẫn có thể truy cập qua các
+// mục khác trong Sidebar nếu cần).
 export default function Home() {
   const navigate = useNavigate();
-  const courses = getAllCourses();
-  const { history } = useHistory();
-  const { getProgress } = useProgress();
+  const ready = useExamDataReady();
+  const { exams } = useExamData();
+  const [query, setQuery] = useState("");
+  const [courseFilter, setCourseFilter] = useState("all");
 
-  const continueWatching = history
-    .filter((h) => !getProgress(h.lessonId).completed)
-    .slice(0, 4)
-    .map((h) => ({ lesson: findLessonWithContext(h.lessonId), progress: getProgress(h.lessonId).progress }))
-    .filter((x): x is { lesson: NonNullable<ReturnType<typeof findLessonWithContext>>; progress: number } =>
-      Boolean(x.lesson)
-    );
+  const courseOptions = useMemo(() => {
+    const ids = Array.from(new Set(exams.map((e) => e.courseId)));
+    return ids.map((id) => getCourse(id)).filter((c): c is NonNullable<typeof c> => Boolean(c));
+  }, [exams]);
+
+  const filteredExams = useMemo(() => {
+    return exams.filter((e) => {
+      if (courseFilter !== "all" && e.courseId !== courseFilter) return false;
+      const course = getCourse(e.courseId);
+      const haystack = `${e.title} ${e.topic ?? ""} ${course?.name ?? ""}`.toLowerCase();
+      return haystack.includes(query.toLowerCase());
+    });
+  }, [exams, query, courseFilter]);
 
   return (
-    <div className="container-page py-8 sm:py-12 space-y-12">
-      <section className="text-center max-w-2xl mx-auto pt-4 sm:pt-8">
-        <h1 className="text-3xl sm:text-4xl font-display font-bold text-ash-200">
-          {siteConfig.tagline}
-        </h1>
-        <p className="mt-3 text-ash-400">{siteConfig.description}</p>
-        <div className="mt-7 max-w-xl mx-auto">
-          <SearchBar
-            size="hero"
-            onSearch={(q) => q && navigate(`/search?q=${encodeURIComponent(q)}`)}
-            placeholder="Tìm kiếm bài học, giáo viên, chủ đề..."
+    <div className="container-page py-8 sm:py-12 space-y-8">
+      <section className="text-center max-w-xl mx-auto pt-2 sm:pt-6">
+        <div className="text-4xl mb-2">📝</div>
+        <h1 className="text-2xl sm:text-3xl font-display font-bold text-ash-200">Ôn luyện & Kiểm tra</h1>
+        <p className="mt-2 text-ash-400">Chọn đề, làm bài và theo dõi tiến bộ của bạn.</p>
+      </section>
+
+      {/* Gộp mọi lối tắt vào một khu vực duy nhất */}
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <button
+          onClick={() => navigate("/exams/leaderboard")}
+          className="flex flex-col items-center gap-2 rounded-xl border border-ink-600 bg-ink-800/40 px-4 py-5 hover:border-cue/50 hover:bg-ink-800/70 transition-colors"
+        >
+          <span className="text-2xl">🏆</span>
+          <span className="text-sm font-medium text-ash-200">Xếp hạng</span>
+        </button>
+        <button
+          onClick={() => navigate("/exams/history")}
+          className="flex flex-col items-center gap-2 rounded-xl border border-ink-600 bg-ink-800/40 px-4 py-5 hover:border-cue/50 hover:bg-ink-800/70 transition-colors"
+        >
+          <span className="text-2xl">🕘</span>
+          <span className="text-sm font-medium text-ash-200">Lịch sử làm bài</span>
+        </button>
+        <button
+          onClick={() => setCourseFilter("all")}
+          className="flex flex-col items-center gap-2 rounded-xl border border-ink-600 bg-ink-800/40 px-4 py-5 hover:border-cue/50 hover:bg-ink-800/70 transition-colors"
+        >
+          <span className="text-2xl">📚</span>
+          <span className="text-sm font-medium text-ash-200">Tất cả đề</span>
+        </button>
+        <button
+          onClick={() => navigate("/admin")}
+          className="flex flex-col items-center gap-2 rounded-xl border border-ink-600 bg-ink-800/40 px-4 py-5 hover:border-cue/50 hover:bg-ink-800/70 transition-colors"
+        >
+          <span className="text-2xl">⚙</span>
+          <span className="text-sm font-medium text-ash-200">Quản trị</span>
+        </button>
+      </section>
+
+      {/* Bộ lọc đề kiểm tra */}
+      <section className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="🔍 Tìm đề theo tên, chủ đề, môn học..."
+            className="sm:flex-1"
           />
+          {courseOptions.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
+              <button
+                onClick={() => setCourseFilter("all")}
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium border transition-colors ${
+                  courseFilter === "all"
+                    ? "border-cue bg-cue/10 text-cue"
+                    : "border-ink-600 text-ash-400 hover:text-ash-200"
+                }`}
+              >
+                Tất cả
+              </button>
+              {courseOptions.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCourseFilter(c.id)}
+                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium border transition-colors ${
+                    courseFilter === c.id
+                      ? "border-cue bg-cue/10 text-cue"
+                      : "border-ink-600 text-ash-400 hover:text-ash-200"
+                  }`}
+                >
+                  {c.shortName ?? c.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      </section>
 
-      {continueWatching.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-display font-semibold text-ash-200">Tiếp tục học</h2>
+        {!ready ? (
+          <p className="text-sm text-ash-500">Đang tải...</p>
+        ) : filteredExams.length === 0 ? (
+          <EmptyState
+            icon="📝"
+            title={exams.length === 0 ? "Chưa có đề kiểm tra" : "Không tìm thấy đề phù hợp"}
+            description={
+              exams.length === 0
+                ? "Đề kiểm tra sẽ được quản trị viên thêm sớm — quay lại sau nhé."
+                : "Thử đổi từ khóa tìm kiếm hoặc bộ lọc môn học."
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredExams.map((exam) => {
+              const course = getCourse(exam.courseId);
+              return (
+                <Card
+                  key={exam.id}
+                  className="space-y-3 cursor-pointer hover:border-cue/50 transition-colors"
+                  onClick={() => navigate(`/exams/${exam.id}`)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge>{course?.shortName ?? "?"}</Badge>
+                    {exam.topic && <Badge tone="cue">{exam.topic}</Badge>}
+                  </div>
+                  <h3 className="font-display font-semibold text-ash-200 leading-snug">{exam.title}</h3>
+                  <p className="text-xs text-ash-500">
+                    {exam.questionIds.length} câu
+                    {exam.timeLimitMinutes ? ` · ${exam.timeLimitMinutes} phút` : " · không giới hạn"}
+                  </p>
+                  <Button size="sm" className="w-full mt-1">
+                    Bắt đầu làm bài
+                  </Button>
+                </Card>
+              );
+            })}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {continueWatching.map(({ lesson, progress }) => (
-              <LessonCard key={lesson.id} lesson={lesson} progress={progress} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {continueWatching.length === 0 && (
-        <EmptyState
-          icon="🎬"
-          title="Chưa có bài học nào đang xem"
-          description="Bắt đầu học một bài để thấy tiến độ của bạn ở đây."
-        />
-      )}
-
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-display font-semibold text-ash-200">📝 Kiểm tra</h2>
-          <button onClick={() => navigate("/exams")} className="text-sm text-cue hover:underline">
-            Xem tất cả →
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <button
-            onClick={() => navigate("/exams")}
-            className="text-left rounded-xl border border-ink-600 bg-ink-800/40 p-5 hover:border-cue/50 transition-colors"
-          >
-            <div className="text-2xl mb-2">✏️</div>
-            <p className="font-display font-semibold text-ash-200">Làm bài kiểm tra</p>
-            <p className="text-sm text-ash-500 mt-1">Chọn đề theo môn học và bắt đầu ngay</p>
-          </button>
-          <button
-            onClick={() => navigate("/exams/leaderboard")}
-            className="text-left rounded-xl border border-ink-600 bg-ink-800/40 p-5 hover:border-cue/50 transition-colors"
-          >
-            <div className="text-2xl mb-2">🏆</div>
-            <p className="font-display font-semibold text-ash-200">Bảng xếp hạng</p>
-            <p className="text-sm text-ash-500 mt-1">Xem điểm số của bạn và mọi người</p>
-          </button>
-          <button
-            onClick={() => navigate("/exams/history")}
-            className="text-left rounded-xl border border-ink-600 bg-ink-800/40 p-5 hover:border-cue/50 transition-colors"
-          >
-            <div className="text-2xl mb-2">📜</div>
-            <p className="font-display font-semibold text-ash-200">Lịch sử làm bài</p>
-            <p className="text-sm text-ash-500 mt-1">Xem lại các đề đã làm trước đây</p>
-          </button>
-        </div>
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-display font-semibold text-ash-200">Khóa học / Môn học</h2>
-        </div>
-        <CourseGrid courses={courses} />
+        )}
       </section>
     </div>
   );

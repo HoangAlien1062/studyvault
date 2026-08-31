@@ -148,21 +148,22 @@ export default function TakeExamPage() {
     return (
       <div className="container-page py-10 max-w-lg">
         <Card className="space-y-5 text-center">
+          <div className="text-3xl">📝</div>
           <div>
             <p className="text-xs uppercase tracking-wider text-cue font-mono">{course?.shortName}</p>
             <h1 className="text-xl font-display font-bold text-ash-200 mt-1">{exam.title}</h1>
           </div>
-          <p className="text-sm text-ash-400">
-            {orderedQuestions.length} câu
-            {exam.timeLimitMinutes ? ` · ${exam.timeLimitMinutes} phút` : " · không giới hạn thời gian"}
-          </p>
+          <div className="flex items-center justify-center gap-4 text-sm text-ash-400 py-2 border-y border-ink-700">
+            <span>📋 {orderedQuestions.length} câu</span>
+            <span>⏱ {exam.timeLimitMinutes ? `${exam.timeLimitMinutes} phút` : "Không giới hạn"}</span>
+          </div>
           {exam.timeLimitMinutes && (
             <p className="text-xs text-signal-live">⚠️ Thời gian sẽ bắt đầu ngay khi bạn nhấn bắt đầu.</p>
           )}
           <p className="text-sm text-ash-400">
             Làm bài với tên: <span className="text-ash-200 font-medium">{name}</span>
           </p>
-          <Button className="w-full" onClick={handleStart}>
+          <Button className="w-full" size="md" onClick={handleStart}>
             Bắt đầu làm bài
           </Button>
         </Card>
@@ -174,11 +175,11 @@ export default function TakeExamPage() {
   const deadline = exam.timeLimitMinutes ? (startedAt ?? Date.now()) + exam.timeLimitMinutes * 60_000 : null;
 
   return (
-    <div className="container-page py-6 space-y-5">
+    <div className="container-page py-6 pb-36 lg:pb-6 space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-wider text-cue font-mono">{course?.shortName}</p>
-          <h1 className="font-display font-semibold text-ash-200">{exam.title}</h1>
+          <h1 className="font-display font-semibold text-ash-200 truncate">{exam.title}</h1>
         </div>
         {deadline && <ExamTimer deadline={deadline} onExpire={() => setConfirmingSubmit(true)} />}
       </div>
@@ -201,8 +202,12 @@ export default function TakeExamPage() {
       <div className="flex gap-6">
         <div className="flex-1 min-w-0 space-y-4">
           <Card className="space-y-4">
-            <p className="text-xs font-mono text-ash-500">Câu {current + 1} / {orderedQuestions.length}</p>
-            <p className="text-sm text-ash-200 leading-relaxed">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center justify-center h-7 min-w-7 px-2 rounded-full bg-cue/10 text-cue text-xs font-mono font-semibold">
+                {current + 1}/{orderedQuestions.length}
+              </span>
+            </div>
+            <p className="text-[15px] text-ash-200 leading-relaxed">
               <MathText text={q.question} />
             </p>
             {q.imageUrl && (
@@ -215,7 +220,8 @@ export default function TakeExamPage() {
             <QuestionAnswerInput question={q} answer={answers[q.id]} onChange={handleAnswer} />
           </Card>
 
-          <div className="flex items-center justify-between">
+          {/* Điều hướng — ẩn trên mobile, dùng thanh dưới cùng cố định thay thế */}
+          <div className="hidden lg:flex items-center justify-between">
             <Button variant="secondary" disabled={current === 0} onClick={() => setCurrent((c) => c - 1)}>
               ← Trước
             </Button>
@@ -228,8 +234,8 @@ export default function TakeExamPage() {
         </div>
 
         <div className="hidden lg:block w-56 shrink-0">
-          <Card>
-            <p className="text-xs font-medium text-ash-400 mb-3">CÂU HỎI</p>
+          <Card className="space-y-3">
+            <p className="text-xs font-medium text-ash-400">CÂU HỎI</p>
             <div className="grid grid-cols-5 gap-2">
               {orderedQuestions.map((item, idx) => (
                 <button
@@ -246,6 +252,14 @@ export default function TakeExamPage() {
                   {idx + 1}
                 </button>
               ))}
+            </div>
+            <div className="flex items-center gap-3 pt-1 text-[11px] text-ash-500">
+              <span className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-signal-done/60" /> Đã làm
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm border border-ink-600" /> Chưa làm
+              </span>
             </div>
           </Card>
         </div>
@@ -270,9 +284,31 @@ export default function TakeExamPage() {
         ))}
       </div>
 
+      {/* Mobile: thanh điều hướng cố định ở đáy màn hình (nằm trên thanh nav chính của app) */}
+      <div className="lg:hidden fixed bottom-16 left-0 right-0 z-50 border-t border-ink-700 bg-ink-900/95 backdrop-blur px-4 py-3 flex items-center gap-2 shadow-lg">
+        <Button
+          variant="secondary"
+          className="flex-1"
+          disabled={current === 0}
+          onClick={() => setCurrent((c) => c - 1)}
+        >
+          ← Trước
+        </Button>
+        {current < orderedQuestions.length - 1 ? (
+          <Button className="flex-1" onClick={() => setCurrent((c) => c + 1)}>
+            Tiếp →
+          </Button>
+        ) : (
+          <Button className="flex-1" onClick={() => setConfirmingSubmit(true)}>
+            Nộp bài
+          </Button>
+        )}
+      </div>
+
       {confirmingSubmit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/70 px-4">
           <Card className="max-w-sm w-full space-y-4 text-center">
+            <div className="text-3xl">{unansweredCount > 0 ? "⚠️" : "✅"}</div>
             {unansweredCount > 0 ? (
               <p className="text-sm text-ash-300">
                 Bạn chưa trả lời <span className="text-signal-live font-semibold">{unansweredCount}</span> câu.
@@ -283,10 +319,12 @@ export default function TakeExamPage() {
               <p className="text-sm text-ash-300">Nộp bài kiểm tra này?</p>
             )}
             <div className="flex gap-2 justify-center">
-              <Button variant="secondary" onClick={() => setConfirmingSubmit(false)}>
+              <Button variant="secondary" className="flex-1" onClick={() => setConfirmingSubmit(false)}>
                 Quay lại
               </Button>
-              <Button onClick={doSubmit}>Nộp bài</Button>
+              <Button className="flex-1" onClick={doSubmit}>
+                Nộp bài
+              </Button>
             </div>
           </Card>
         </div>
