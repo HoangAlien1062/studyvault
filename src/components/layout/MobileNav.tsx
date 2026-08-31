@@ -5,7 +5,7 @@ const items = [
   { to: "/exams", label: "Đề thi", icon: "📝" },
   { to: "/exams/leaderboard", label: "Xếp hạng", icon: "🏆" },
   { to: "/exams/history", label: "Lịch sử", icon: "🕘" },
-  { to: "/admin", label: "Cài đặt", icon: "⚙" },
+  { to: "/settings", label: "Cài đặt", icon: "⚙" },
 ];
 
 export default function MobileNav() {

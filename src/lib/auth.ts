@@ -53,3 +53,9 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
   }
   return data as Profile | null;
 }
+
+export async function updateDisplayName(userId: string, displayName: string) {
+  if (!supabase) throw new Error(NO_SUPABASE_ERROR);
+  const { error } = await supabase.from("profiles").update({ display_name: displayName }).eq("user_id", userId);
+  if (error) throw error;
+}

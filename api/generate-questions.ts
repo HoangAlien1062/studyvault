@@ -29,6 +29,7 @@ interface GenerateRequestBody {
   counts: Partial<Record<QuestionType, number>>;
   difficulty: Difficulty;
   hasSourceImage?: boolean; // tài liệu gốc là 1 ảnh — có thể gắn lại ảnh đó cho câu cần xem hình
+  availableCourses?: { id: string; name: string }[]; // để AI tự chọn đúng môn thay vì người dùng chọn tay
 }
 
 interface RawQuestion {
@@ -43,9 +44,9 @@ interface RawQuestion {
   referencesFigure?: boolean;
 }
 
-function extractJsonBlock(raw: string): string {
-  const start = raw.indexOf("[");
-  const end = raw.lastIndexOf("]");
+function extractJsonObject(raw: string): string {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
   if (start === -1 || end === -1) return raw;
   return raw.slice(start, end + 1);
 }
@@ -199,11 +200,24 @@ yêu cầu "quan sát hình/đồ thị/sơ đồ bên" hay bất kỳ hình min
 có ảnh nào hiển thị cho học sinh xem. Nếu cần mô tả một tình huống có tính không gian
 (hình học, mạch điện...), hãy diễn đạt đầy đủ bằng lời/số liệu trong chính câu hỏi.`;
 
-  const systemPrompt = `Bạn là giáo viên biên soạn câu hỏi ôn tập tiếng Việt${
-    body.courseName ? ` môn ${body.courseName}` : ""
-  }. Chỉ tạo câu hỏi dựa TRÊN nội dung tài liệu được cung cấp — không bịa
-kiến thức ngoài tài liệu trừ khi tài liệu quá ít thông tin thì có thể bổ
-sung kiến thức phổ thông liên quan trực tiếp đến chủ đề.
+  const courseListText = (body.availableCourses ?? [])
+    .map((c) => `- id="${c.id}": ${c.name}`)
+    .join("\n");
+  const courseClassificationBlock = courseListText
+    ? `\nDựa vào nội dung tài liệu, hãy TỰ XÁC ĐỊNH câu hỏi này thuộc môn học nào trong danh
+sách dưới đây (so khớp theo nội dung kiến thức, không theo tên file):
+${courseListText}
+- id="other": nếu nội dung không khớp rõ với môn nào ở trên, hoặc trộn nhiều môn
+
+Trả về id môn phù hợp nhất vào field "courseId" ở gốc JSON (bắt buộc, đúng 1 trong các
+id ở trên).`
+    : "";
+
+  const systemPrompt = `Bạn là giáo viên biên soạn câu hỏi ôn tập tiếng Việt. Chỉ tạo câu hỏi
+dựa TRÊN nội dung tài liệu được cung cấp — không bịa kiến thức ngoài tài liệu trừ khi
+tài liệu quá ít thông tin thì có thể bổ sung kiến thức phổ thông liên quan trực tiếp
+đến chủ đề.
+${courseClassificationBlock}
 
 ${figureInstruction}
 
@@ -214,9 +228,11 @@ ${requestLines.join("\n")}
 
 Với ${difficultyText}.
 
-Chỉ trả lời bằng một JSON array hợp lệ, KHÔNG kèm giải thích, KHÔNG markdown.
-Mỗi phần tử theo đúng 1 trong 3 dạng (field "referencesFigure" là boolean, tùy chọn,
-mặc định false nếu không có):
+Chỉ trả lời bằng một JSON OBJECT hợp lệ duy nhất, KHÔNG kèm giải thích, KHÔNG markdown,
+đúng dạng: {"courseId": "...", "questions": [ ... ]}
+
+Mỗi phần tử trong "questions" theo đúng 1 trong 3 dạng (field "referencesFigure" là
+boolean, tùy chọn, mặc định false nếu không có):
 
 Trắc nghiệm:
 {"type":"multiple_choice","question":"...","difficulty":"easy|medium|hard","options":[{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}],"correctAnswer":"B","explanation":"...","referencesFigure":false}
@@ -269,16 +285,22 @@ Trả lời ngắn:
         ?.map((p: { text?: string }) => p.text || "")
         .join("") || "";
 
-    let parsedArray: unknown[];
+    let parsedObj: { courseId?: string; questions?: unknown[] };
     try {
-      parsedArray = JSON.parse(extractJsonBlock(rawText));
-      if (!Array.isArray(parsedArray)) throw new Error("not array");
+      parsedObj = JSON.parse(extractJsonObject(rawText));
+      if (!Array.isArray(parsedObj.questions)) throw new Error("missing questions array");
     } catch {
       res.status(502).json({ error: "AI trả về định dạng không hợp lệ, vui lòng thử lại." });
       return;
     }
 
-    const questions = parsedArray.map(sanitizeQuestion).filter((q): q is RawQuestion => q !== null);
+    const validCourseIds = new Set((body.availableCourses ?? []).map((c) => c.id).concat("other"));
+    const courseId =
+      parsedObj.courseId && validCourseIds.has(parsedObj.courseId) ? parsedObj.courseId : "other";
+
+    const questions = parsedObj
+      .questions!.map(sanitizeQuestion)
+      .filter((q): q is RawQuestion => q !== null);
 
     if (questions.length === 0) {
       res.status(422).json({
@@ -289,6 +311,7 @@ Trả lời ngắn:
 
     res.status(200).json({
       questions,
+      courseId,
       requested: totalRequested,
       generated: questions.length,
     });

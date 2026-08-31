@@ -1,7 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
-import { signOut } from "../../lib/auth";
 
 export default function Header() {
   const navigate = useNavigate();
@@ -47,36 +46,24 @@ export default function Header() {
       <div className="flex-1 sm:hidden" />
 
       <div className="flex items-center gap-3 shrink-0">
-        <div className="flex items-center gap-2.5 pl-2 border-l border-ink-600/70">
-          <div className="h-9 w-9 rounded-full bg-ink-700 border border-ink-600 flex items-center justify-center text-sm">
+        <button
+          onClick={() => (user ? navigate("/account") : navigate("/login"))}
+          className="flex items-center gap-2.5 pl-2 border-l border-ink-600/70"
+        >
+          <div className="h-9 w-9 rounded-full bg-ink-700 border border-ink-600 flex items-center justify-center text-sm hover:border-cue/50 transition-colors">
             👤
           </div>
           {loading ? null : user ? (
-            <div className="hidden md:block leading-tight">
+            <div className="hidden md:block leading-tight text-left">
               <p className="text-sm font-medium text-ash-200 truncate max-w-[140px]">
                 {profile?.display_name ?? user.email}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  signOut();
-                  navigate("/");
-                }}
-                className="text-xs text-ash-500 hover:text-ash-300"
-              >
-                Đăng xuất
-              </button>
+              <span className="text-xs text-ash-500">Xem tài khoản</span>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-              className="text-sm font-medium text-cue hover:underline"
-            >
-              Đăng nhập
-            </button>
+            <span className="text-sm font-medium text-cue">Đăng nhập</span>
           )}
-        </div>
+        </button>
       </div>
     </header>
   );

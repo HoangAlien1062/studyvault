@@ -62,7 +62,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <div className="px-3 py-4 border-t border-ink-600/70 space-y-1">
         <NavLink
-          to="/admin"
+          to="/settings"
           className={({ isActive }) =>
             `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
               isActive ? "bg-cue/10 text-cue" : "text-ash-400 hover:text-ash-200 hover:bg-ink-700/60"

@@ -50,7 +50,7 @@ export default function Home() {
       </section>
 
       {/* Gộp mọi lối tắt vào một khu vực duy nhất */}
-      <section className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <button
           onClick={() => navigate("/exams/create")}
           className="flex flex-col items-center gap-2 rounded-xl border border-cue/40 bg-cue/10 px-4 py-5 hover:border-cue/70 hover:bg-cue/15 transition-colors"
@@ -78,13 +78,6 @@ export default function Home() {
         >
           <span className="text-2xl">📚</span>
           <span className="text-sm font-medium text-ash-200">Tất cả đề</span>
-        </button>
-        <button
-          onClick={() => navigate("/admin")}
-          className="flex flex-col items-center gap-2 rounded-xl border border-ink-600 bg-ink-800/40 px-4 py-5 hover:border-cue/50 hover:bg-ink-800/70 transition-colors"
-        >
-          <span className="text-2xl">⚙</span>
-          <span className="text-sm font-medium text-ash-200">Quản trị</span>
         </button>
       </section>
 

@@ -7,9 +7,10 @@ import { FieldGroup, Input, Select, Textarea } from "../ui/Field";
 import type { Course } from "../../types";
 import type { Difficulty, Question, QuestionType } from "../../types/exam";
 import { createDocument, createQuestion, updateDocument, uploadDocumentFile } from "../../lib/examStore";
+import { OTHER_COURSE_ID } from "../../lib/catalog";
 
-// Flow (mục 52-53 spec):
-// Chọn môn → Upload/chụp tài liệu → AI đọc → chọn số câu/độ khó → AI tạo → preview → lưu (draft)
+// Flow: Upload/chụp tài liệu → AI đọc → chọn số câu/độ khó → AI tạo (tự xếp
+// môn học) → preview → lưu (draft)
 
 type Step = "setup" | "analyzing" | "configure" | "generating" | "preview";
 
@@ -38,7 +39,7 @@ export default function AIQuestionGenerator({ courses, currentUserId, onDone }: 
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<Step>("setup");
-  const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
+  const [courseId, setCourseId] = useState(""); // AI tự xác định sau khi tạo câu hỏi, không cho người dùng chọn tay
   const [topic, setTopic] = useState("");
   const [pastedText, setPastedText] = useState("");
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -56,7 +57,7 @@ export default function AIQuestionGenerator({ courses, currentUserId, onDone }: 
   const [generated, setGenerated] = useState<GeneratedQuestion[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const course = courses.find((c) => c.id === courseId);
+  const detectedCourse = courses.find((c) => c.id === courseId);
 
   function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -233,17 +234,20 @@ export default function AIQuestionGenerator({ courses, currentUserId, onDone }: 
     try {
       const { ok, data } = await fetchJson("/api/generate-questions", {
         text: extractedText,
-        courseName: course?.name,
         topic: topic.trim() || undefined,
         counts: { multiple_choice: mcCount, true_false: tfCount, short_answer: saCount },
         difficulty,
         hasSourceImage: Boolean(sourceImageUrl),
+        availableCourses: courses
+          .filter((c) => c.id !== OTHER_COURSE_ID)
+          .map((c) => ({ id: c.id, name: c.name })),
       });
       if (!ok) {
         setError(data.error || "AI tạo câu hỏi thất bại.");
         setStep("configure");
         return;
       }
+      setCourseId(data.courseId || OTHER_COURSE_ID);
       setGenerated(
         (data.questions as GeneratedQuestion[]).map((q) => ({
           ...q,
@@ -313,15 +317,9 @@ export default function AIQuestionGenerator({ courses, currentUserId, onDone }: 
 
       {step === "setup" && (
         <div className="space-y-4">
-          <FieldGroup label="Môn học">
-            <Select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </FieldGroup>
+          <p className="text-sm text-ash-400">
+            🤖 AI sẽ tự đọc tài liệu và xếp câu hỏi vào đúng môn học phù hợp — bạn không cần chọn môn.
+          </p>
 
           <div>
             <p className="text-xs font-medium text-ash-400 mb-1.5">Tài liệu nguồn</p>
@@ -435,7 +433,7 @@ export default function AIQuestionGenerator({ courses, currentUserId, onDone }: 
               ← Chọn tài liệu khác
             </button>
             <Button
-              disabled={!courseId || totalRequested <= 0 || !extractedText.trim()}
+              disabled={totalRequested <= 0 || !extractedText.trim()}
               onClick={handleGenerate}
             >
               Tạo {totalRequested > 0 ? `${totalRequested} câu hỏi` : "câu hỏi"}
@@ -460,6 +458,9 @@ export default function AIQuestionGenerator({ courses, currentUserId, onDone }: 
             </p>
             <Badge tone="neutral">Trạng thái: draft</Badge>
           </div>
+          <p className="text-xs text-ash-500">
+            🤖 AI xếp vào môn: <span className="text-ash-300 font-medium">{detectedCourse?.name ?? "Khác"}</span>
+          </p>
 
           <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
             {generated.map((q, i) => (
