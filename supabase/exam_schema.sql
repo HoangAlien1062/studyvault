@@ -32,7 +32,15 @@ create policy "Public update access"
 
 -- Bật realtime để nhiều thiết bị/người chơi cùng thấy ngân hàng câu
 -- hỏi, đề kiểm tra và bảng xếp hạng cập nhật ngay lập tức.
-alter publication supabase_realtime add table public.exam_content;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'exam_content'
+  ) then
+    alter publication supabase_realtime add table public.exam_content;
+  end if;
+end $$;
 
 -- ============================================================
 -- GIAI ĐOẠN 2 — Storage bucket cho tài liệu upload/chụp ảnh

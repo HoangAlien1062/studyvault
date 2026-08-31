@@ -3,10 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import MathText from "../../components/ui/MathText";
-import { FieldGroup, Input } from "../../components/ui/Field";
 import ExamTimer from "../../components/exams/ExamTimer";
 import QuestionAnswerInput from "../../components/exams/QuestionAnswerInput";
-import { useExamData, useExamDataReady, useExamDisplayName, useMyExamAttemptIds } from "../../hooks/useExamData";
+import { useExamData, useExamDataReady, useMyExamAttemptIds } from "../../hooks/useExamData";
+import { useAuth } from "../../hooks/useAuth";
 import { saveAttempt } from "../../lib/examStore";
 import { gradeExam } from "../../lib/examScoring";
 import { clearExamDraft, loadExamDraft, saveExamDraft } from "../../lib/examDraft";
@@ -32,8 +32,10 @@ export default function TakeExamPage() {
   const navigate = useNavigate();
   const ready = useExamDataReady();
   const { exams, questions } = useExamData();
-  const { displayName, setDisplayName } = useExamDisplayName();
+  const { user, profile, loading: authLoading } = useAuth();
   const { addMyAttemptId } = useMyExamAttemptIds();
+
+  const displayName = profile?.display_name || user?.email?.split("@")[0] || "Học sinh";
 
   const exam = exams.find((e) => e.id === examId);
   const course = exam ? getCourse(exam.courseId) : undefined;
@@ -51,7 +53,7 @@ export default function TakeExamPage() {
     );
   }, [exam, questions, examId]);
 
-  const [name, setName] = useState(displayName);
+  const [name] = useState(displayName);
   const [started, setStarted] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [current, setCurrent] = useState(0);
@@ -63,7 +65,6 @@ export default function TakeExamPage() {
     if (!examId) return;
     const draft = loadExamDraft(examId);
     if (draft) {
-      setName(draft.displayName);
       setStartedAt(draft.startedAt);
       setAnswers(Object.fromEntries(draft.answers.map((a) => [a.questionId, a])));
       setStarted(true);
@@ -80,7 +81,28 @@ export default function TakeExamPage() {
     });
   }, [started, startedAt, exam, examId, name, answers]);
 
-  if (!ready) return <div className="container-page py-10 text-sm text-ash-500">Đang tải...</div>;
+  if (!ready || authLoading) return <div className="container-page py-10 text-sm text-ash-500">Đang tải...</div>;
+
+  // Bắt buộc đăng nhập mới được làm bài kiểm tra (để lưu đúng kết quả
+  // theo tài khoản, tránh gian lận đổi tên khi làm bài).
+  if (!user) {
+    return (
+      <div className="container-page py-16 flex justify-center">
+        <Card className="w-full max-w-sm space-y-4 text-center">
+          <div className="text-3xl">🔒</div>
+          <div>
+            <h1 className="font-display font-semibold text-ash-200">Cần đăng nhập để làm bài</h1>
+            <p className="text-sm text-ash-400 mt-1">
+              Đăng nhập để kết quả được lưu đúng theo tài khoản của bạn và lên được bảng xếp hạng.
+            </p>
+          </div>
+          <Button className="w-full" onClick={() => navigate("/login")}>
+            Đăng nhập
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   if (!exam) {
     return (
@@ -94,9 +116,6 @@ export default function TakeExamPage() {
   }
 
   function handleStart() {
-    const finalName = name.trim() || "Học sinh";
-    setDisplayName(finalName);
-    setName(finalName);
     setStartedAt(Date.now());
     setStarted(true);
   }
@@ -140,9 +159,9 @@ export default function TakeExamPage() {
           {exam.timeLimitMinutes && (
             <p className="text-xs text-signal-live">⚠️ Thời gian sẽ bắt đầu ngay khi bạn nhấn bắt đầu.</p>
           )}
-          <FieldGroup label="Tên người làm bài">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập tên của bạn" />
-          </FieldGroup>
+          <p className="text-sm text-ash-400">
+            Làm bài với tên: <span className="text-ash-200 font-medium">{name}</span>
+          </p>
           <Button className="w-full" onClick={handleStart}>
             Bắt đầu làm bài
           </Button>
@@ -162,6 +181,21 @@ export default function TakeExamPage() {
           <h1 className="font-display font-semibold text-ash-200">{exam.title}</h1>
         </div>
         {deadline && <ExamTimer deadline={deadline} onExpire={() => setConfirmingSubmit(true)} />}
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-ash-500">
+          <span>
+            Đã trả lời <strong className="text-ash-300">{answeredCount}</strong>/{orderedQuestions.length} câu
+          </span>
+          <span>{Math.round((answeredCount / orderedQuestions.length) * 100)}%</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-ink-700 overflow-hidden">
+          <div
+            className="h-full bg-cue transition-all duration-300"
+            style={{ width: `${(answeredCount / orderedQuestions.length) * 100}%` }}
+          />
+        </div>
       </div>
 
       <div className="flex gap-6">

@@ -47,6 +47,9 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
   const [imageUrl, setImageUrl] = useState<string | undefined>(initial?.imageUrl);
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [skipValidation, setSkipValidation] = useState(false);
 
   async function handleImageSelected(file: File | undefined) {
     if (!file) return;
@@ -63,9 +66,9 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
   }
 
   const canSave = courseId && topic.trim() && question.trim();
+  const course = courses.find((c) => c.id === courseId);
 
-  function handleSubmit() {
-    if (!canSave) return;
+  function buildPayload(): QuestionInput {
     const base = {
       courseId,
       topic: topic.trim(),
@@ -78,20 +81,78 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
       status: initial?.status ?? ("published" as const),
       documentId: initial?.documentId,
     };
+    if (type === "multiple_choice") return { ...base, options, correctAnswer };
+    if (type === "true_false") return { ...base, statements };
+    return {
+      ...base,
+      acceptedAnswers: acceptedAnswers
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    };
+  }
 
-    if (type === "multiple_choice") {
-      onSave({ ...base, options, correctAnswer });
-    } else if (type === "true_false") {
-      onSave({ ...base, statements });
-    } else {
-      onSave({
-        ...base,
-        acceptedAnswers: acceptedAnswers
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      });
+  /**
+   * Trước khi lưu câu hỏi thủ công, nhờ AI kiểm tra nhanh đề bài + đáp
+   * án có hợp lý/chính xác không — tránh câu hỏi sai lọt vào ngân hàng.
+   * Nếu server AI đang lỗi (không phải do nội dung sai), vẫn cho lưu
+   * kèm cảnh báo, để không chặn công việc khi hạ tầng gặp sự cố.
+   */
+  async function handleSubmit() {
+    if (!canSave) return;
+    if (skipValidation) {
+      setSkipValidation(false);
+      setValidationError(null);
+      onSave(buildPayload());
+      return;
     }
+    setValidationError(null);
+    setValidating(true);
+    try {
+      const res = await fetch("/api/validate-question", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          question: question.trim(),
+          type,
+          options: type === "multiple_choice" ? options : undefined,
+          correctAnswer: type === "multiple_choice" ? correctAnswer : undefined,
+          statements: type === "true_false" ? statements : undefined,
+          acceptedAnswers:
+            type === "short_answer"
+              ? acceptedAnswers.split(",").map((s) => s.trim()).filter(Boolean)
+              : undefined,
+          courseName: course?.name,
+          topic: topic.trim(),
+        }),
+      });
+      const raw = await res.text();
+      let data: { valid?: boolean; reason?: string; error?: string };
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = {};
+      }
+
+      if (res.ok && data.valid === false) {
+        setValidationError(`❌ Sai: ${data.reason || "AI cho rằng câu hỏi này chưa chính xác."}`);
+        setValidating(false);
+        return;
+      }
+      if (!res.ok && data.error) {
+        setValidationError(`⚠️ Không kiểm tra được bằng AI (${data.error}). Bấm "Lưu câu hỏi" lần nữa để lưu mà không cần AI kiểm tra.`);
+        setSkipValidation(true);
+        setValidating(false);
+        return;
+      }
+    } catch {
+      setValidationError('⚠️ Không kết nối được AI để kiểm tra. Bấm "Lưu câu hỏi" lần nữa để lưu mà không cần AI kiểm tra.');
+      setSkipValidation(true);
+      setValidating(false);
+      return;
+    }
+    setValidating(false);
+    onSave(buildPayload());
   }
 
   return (
@@ -250,13 +311,16 @@ export default function QuestionEditor({ courses, initial, onCancel, onSave }: Q
       </FieldGroup>
 
       <div className="flex items-center gap-2 pt-1">
-        <Button onClick={handleSubmit} disabled={!canSave}>
-          Lưu câu hỏi
+        <Button onClick={handleSubmit} disabled={!canSave || validating}>
+          {validating ? "🧠 AI đang kiểm tra..." : skipValidation ? "Lưu (không kiểm tra AI)" : "Lưu câu hỏi"}
         </Button>
         <Button variant="ghost" onClick={onCancel}>
           Hủy
         </Button>
       </div>
+      {validationError && (
+        <p className="text-xs text-signal-live mt-2">{validationError}</p>
+      )}
     </Card>
   );
 }

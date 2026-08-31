@@ -60,6 +60,41 @@ export default function Home() {
 
       <section>
         <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-display font-semibold text-ash-200">📝 Kiểm tra</h2>
+          <button onClick={() => navigate("/exams")} className="text-sm text-cue hover:underline">
+            Xem tất cả →
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <button
+            onClick={() => navigate("/exams")}
+            className="text-left rounded-xl border border-ink-600 bg-ink-800/40 p-5 hover:border-cue/50 transition-colors"
+          >
+            <div className="text-2xl mb-2">✏️</div>
+            <p className="font-display font-semibold text-ash-200">Làm bài kiểm tra</p>
+            <p className="text-sm text-ash-500 mt-1">Chọn đề theo môn học và bắt đầu ngay</p>
+          </button>
+          <button
+            onClick={() => navigate("/exams/leaderboard")}
+            className="text-left rounded-xl border border-ink-600 bg-ink-800/40 p-5 hover:border-cue/50 transition-colors"
+          >
+            <div className="text-2xl mb-2">🏆</div>
+            <p className="font-display font-semibold text-ash-200">Bảng xếp hạng</p>
+            <p className="text-sm text-ash-500 mt-1">Xem điểm số của bạn và mọi người</p>
+          </button>
+          <button
+            onClick={() => navigate("/exams/history")}
+            className="text-left rounded-xl border border-ink-600 bg-ink-800/40 p-5 hover:border-cue/50 transition-colors"
+          >
+            <div className="text-2xl mb-2">📜</div>
+            <p className="font-display font-semibold text-ash-200">Lịch sử làm bài</p>
+            <p className="text-sm text-ash-500 mt-1">Xem lại các đề đã làm trước đây</p>
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-display font-semibold text-ash-200">Khóa học / Môn học</h2>
         </div>
         <CourseGrid courses={courses} />
