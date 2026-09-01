@@ -8,6 +8,8 @@ import QuestionAnswerInput from "../../components/exams/QuestionAnswerInput";
 import { useExamData, useExamDataReady, useMyExamAttemptIds } from "../../hooks/useExamData";
 import { useAuth } from "../../hooks/useAuth";
 import { saveAttempt, joinDuel } from "../../lib/examStore";
+import { awardCoins, calcCoinsForAttempt } from "../../lib/coins";
+import { notifyStorageChange } from "../../lib/storage";
 import { gradeExam } from "../../lib/examScoring";
 import { clearExamDraft, loadExamDraft, saveExamDraft } from "../../lib/examDraft";
 import { getCourse } from "../../lib/catalog";
@@ -138,6 +140,9 @@ export default function TakeExamPage() {
     const attempt = saveAttempt({ ...graded, userId: user?.id, duelId });
     addMyAttemptId(attempt.id);
     clearExamDraft(examId);
+    if (user) {
+      awardCoins(user.id, calcCoinsForAttempt(graded.normalizedScore)).then(() => notifyStorageChange());
+    }
     if (duelId && user) {
       // Bài làm này là lượt của đối thủ trong 1 cuộc thách đấu — nối kết quả vào Duel.
       joinDuel(duelId, user.id, displayName, attempt.id);

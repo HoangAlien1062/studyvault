@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import { fetchProfile, type Profile } from "../lib/auth";
+import { STORAGE_EVENT } from "../lib/storage";
 
 interface AuthState {
   user: User | null;
@@ -50,6 +51,18 @@ export function useAuth(): AuthState {
       sub.subscription.unsubscribe();
     };
   }, []);
+
+  // Coin vừa được cộng (vd sau khi nộp bài) phát tín hiệu qua
+  // STORAGE_EVENT — nghe lại để số coin ở Header cập nhật ngay,
+  // không cần load lại trang.
+  useEffect(() => {
+    if (!user) return;
+    const handler = () => {
+      fetchProfile(user.id).then(setProfile);
+    };
+    window.addEventListener(STORAGE_EVENT, handler);
+    return () => window.removeEventListener(STORAGE_EVENT, handler);
+  }, [user]);
 
   return { user, profile, loading, isAdmin: Boolean(profile?.is_admin) };
 }

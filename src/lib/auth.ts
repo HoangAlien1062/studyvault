@@ -15,6 +15,7 @@ export interface Profile {
   user_id: string;
   display_name: string | null;
   is_admin: boolean;
+  coins: number;
   created_at: string;
 }
 

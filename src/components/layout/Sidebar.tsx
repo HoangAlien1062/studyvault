@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { siteConfig } from "../../config/site";
 
 interface NavItem {
@@ -10,9 +10,18 @@ interface NavItem {
 const mainNav: NavItem[] = [
   { to: "/", label: "Trang chủ", icon: "🏠" },
   { to: "/exams", label: "Kiểm tra", icon: "📝" },
+  { to: "/solo", label: "Solo", icon: "⚔️" },
   { to: "/exams/leaderboard", label: "Xếp hạng", icon: "🏆" },
   { to: "/exams/history", label: "Lịch sử", icon: "🕘" },
 ];
+
+// Cùng lý do như MobileNav: "/exams/leaderboard" và "/exams/history"
+// đều là tiền tố của "/exams" nên phải so khớp riêng để tránh 2 mục
+// cùng sáng lúc.
+function isExamsTabActive(pathname: string): boolean {
+  if (!pathname.startsWith("/exams")) return false;
+  return !pathname.startsWith("/exams/leaderboard") && !pathname.startsWith("/exams/history");
+}
 
 interface SidebarProps {
   collapsed: boolean;
@@ -20,6 +29,8 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const location = useLocation();
+
   return (
     <aside
       className={`hidden lg:flex flex-col shrink-0 border-r border-ink-600/70 bg-ink-850 transition-all duration-300 h-screen sticky top-0 ${
@@ -38,26 +49,29 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {mainNav.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) =>
-              `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
-                isActive
-                  ? "bg-cue/10 text-cue"
-                  : "text-ash-400 hover:text-ash-200 hover:bg-ink-700/60"
-              }`
-            }
-            title={collapsed ? item.label : undefined}
-          >
-            <span className="text-base shrink-0" aria-hidden>
-              {item.icon}
-            </span>
-            {!collapsed && <span className="truncate">{item.label}</span>}
-          </NavLink>
-        ))}
+        {mainNav.map((item) => {
+          const active = item.to === "/exams" ? isExamsTabActive(location.pathname) : undefined;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to !== "/exams" ? item.to === "/" : false}
+              className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
+                  (active ?? isActive)
+                    ? "bg-cue/10 text-cue"
+                    : "text-ash-400 hover:text-ash-200 hover:bg-ink-700/60"
+                }`
+              }
+              title={collapsed ? item.label : undefined}
+            >
+              <span className="text-base shrink-0" aria-hidden>
+                {item.icon}
+              </span>
+              {!collapsed && <span className="truncate">{item.label}</span>}
+            </NavLink>
+          );
+        })}
       </nav>
 
       <div className="px-3 py-4 border-t border-ink-600/70 space-y-1">

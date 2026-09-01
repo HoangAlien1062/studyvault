@@ -13,6 +13,13 @@ import { getCourse } from "../../lib/catalog";
 // Trang này (dành cho mọi người) chỉ còn Làm bài + Xếp hạng.
 const ACTIONS = [
   {
+    icon: "⚔️",
+    title: "Thách đấu Solo",
+    description: "Mời bạn bè làm cùng đề, so điểm",
+    cta: "Vào Solo",
+    to: "/solo",
+  },
+  {
     icon: "🏆",
     title: "Xếp hạng",
     description: "So điểm với người khác",
