@@ -51,6 +51,28 @@ function extractJsonObject(raw: string): string {
   return raw.slice(start, end + 1);
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Tự thử lại khi Gemini báo 503 (quá tải), trước khi báo lỗi cho người dùng. */
+async function fetchGeminiWithRetry(url: string, body: unknown, signal: AbortSignal): Promise<Response> {
+  const delays = [0, 1200, 2500];
+  let lastResponse: Response | null = null;
+  for (const delay of delays) {
+    if (delay) await sleep(delay);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      signal,
+      body: JSON.stringify(body),
+    });
+    if (response.ok || response.status !== 503) return response;
+    lastResponse = response;
+  }
+  return lastResponse!;
+}
+
 /** Đọc body JSON thô — không phụ thuộc gói @vercel/node để tránh phải cài thêm. */
 function readJsonBody(req: any): Promise<any> {
   if (req.body && typeof req.body === "object") return Promise.resolve(req.body);
@@ -247,11 +269,9 @@ Trả lời ngắn:
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55_000);
 
-    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
+    const response = await fetchGeminiWithRetry(
+      `${GEMINI_URL}?key=${GEMINI_API_KEY}`,
+      {
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [
           {
@@ -268,11 +288,18 @@ Trả lời ngắn:
           maxOutputTokens: 16384,
           thinkingConfig: { thinkingLevel: "low" },
         },
-      }),
-    });
+      },
+      controller.signal
+    );
     clearTimeout(timeout);
 
     if (!response.ok) {
+      if (response.status === 503) {
+        res.status(503).json({
+          error: "Server AI (Gemini) đang quá tải, đã thử lại vài lần nhưng chưa được. Vui lòng thử lại sau ít phút.",
+        });
+        return;
+      }
       const errText = await response.text();
       res.status(502).json({ error: `Gemini API lỗi: ${errText}` });
       return;

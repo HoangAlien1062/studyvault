@@ -48,6 +48,32 @@ function extractJsonBlock(raw: string): string {
   return raw.slice(start, end + 1);
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Gemini API thỉnh thoảng trả 503 "quá tải, thử lại sau" (nhất là giờ cao
+ * điểm) — tự động thử lại 1-2 lần với khoảng nghỉ ngắn trước khi báo lỗi
+ * cho người dùng, thay vì fail ngay lần đầu.
+ */
+async function fetchGeminiWithRetry(url: string, body: unknown, signal: AbortSignal): Promise<Response> {
+  const delays = [0, 1200, 2500];
+  let lastResponse: Response | null = null;
+  for (const delay of delays) {
+    if (delay) await sleep(delay);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      signal,
+      body: JSON.stringify(body),
+    });
+    if (response.ok || response.status !== 503) return response;
+    lastResponse = response;
+  }
+  return lastResponse!;
+}
+
 /** Đọc body JSON thô — không phụ thuộc gói @vercel/node để tránh phải cài thêm. */
 function readJsonBody(req: any): Promise<any> {
   // Vercel Node.js runtime thường đã tự parse sẵn vào req.body khi
@@ -115,11 +141,9 @@ export default async function handler(req: any, res: any) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55_000);
 
-    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
+    const response = await fetchGeminiWithRetry(
+      `${GEMINI_URL}?key=${GEMINI_API_KEY}`,
+      {
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: "user", parts }],
         generationConfig: {
@@ -127,11 +151,18 @@ export default async function handler(req: any, res: any) {
           maxOutputTokens: 8192,
           thinkingConfig: { thinkingLevel: "low" },
         },
-      }),
-    });
+      },
+      controller.signal
+    );
     clearTimeout(timeout);
 
     if (!response.ok) {
+      if (response.status === 503) {
+        res.status(503).json({
+          error: "Server AI (Gemini) đang quá tải, đã thử lại vài lần nhưng chưa được. Vui lòng thử lại sau ít phút.",
+        });
+        return;
+      }
       const errText = await response.text();
       res.status(502).json({ error: `Gemini API lỗi: ${errText}` });
       return;

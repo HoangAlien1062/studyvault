@@ -9,7 +9,7 @@
 
 import { STORAGE_EVENT, notifyStorageChange } from "./storage";
 import { supabase } from "./supabaseClient";
-import type { Exam, ExamAttempt, ExamDocument, Question } from "../types/exam";
+import type { Duel, Exam, ExamAttempt, ExamDocument, Question } from "../types/exam";
 
 const TABLE = "exam_content";
 const ROW_ID = "main";
@@ -20,13 +20,14 @@ interface ExamData {
   exams: Exam[];
   attempts: ExamAttempt[];
   documents: ExamDocument[];
+  duels: Duel[];
 }
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-let current: ExamData = { questions: [], exams: [], attempts: [], documents: [] };
+let current: ExamData = { questions: [], exams: [], attempts: [], documents: [], duels: [] };
 let ready = false;
 
 export { STORAGE_EVENT };
@@ -77,7 +78,7 @@ async function initialize(): Promise<void> {
     if (data?.data) {
       // Bảo đảm tương thích ngược: các dòng cũ chưa có "documents".
       const loaded = data.data as ExamData;
-      current = { ...loaded, documents: loaded.documents ?? [] };
+      current = { ...loaded, documents: loaded.documents ?? [], duels: loaded.duels ?? [] };
     } else {
       await persistRemote(current);
     }
@@ -256,4 +257,36 @@ export async function uploadDocumentFile(
 
   const { data } = supabase.storage.from(DOCUMENTS_BUCKET).getPublicUrl(path);
   return { fileUrl: data.publicUrl, storagePath: path };
+}
+
+// ---------------------------------------------------------------
+// Duel (Thách đấu Solo) — 2 người cùng làm 1 đề, không cần đồng thời.
+// Người thách tạo Duel sau khi làm xong đề, gửi link cho bạn bè; bạn
+// bè làm cùng đề đó, hệ thống tự nối kết quả vào Duel để so sánh.
+// ---------------------------------------------------------------
+
+export type DuelInput = Omit<Duel, "id" | "createdAt" | "status">;
+
+export function createDuel(input: DuelInput): Duel {
+  const duel: Duel = { ...input, id: generateExamId("duel"), status: "waiting", createdAt: Date.now() };
+  current = { ...deepClone(current), duels: [...deepClone(current.duels), duel] };
+  persist();
+  return duel;
+}
+
+export function joinDuel(
+  duelId: string,
+  opponentId: string,
+  opponentName: string,
+  opponentAttemptId: string
+): void {
+  const next = deepClone(current);
+  const duel = next.duels.find((d) => d.id === duelId);
+  if (!duel) return;
+  duel.opponentId = opponentId;
+  duel.opponentName = opponentName;
+  duel.opponentAttemptId = opponentAttemptId;
+  duel.status = "completed";
+  current = next;
+  persist();
 }

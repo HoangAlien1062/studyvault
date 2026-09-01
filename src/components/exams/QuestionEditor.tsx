@@ -49,9 +49,7 @@ export default function QuestionEditor({ courses, initial, currentUserId, onCanc
   const [visibility, setVisibility] = useState<"public" | "private">(initial?.visibility ?? "public");
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [validating, setValidating] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [skipValidation, setSkipValidation] = useState(false);
+  const [skipReview, setSkipReview] = useState(initial?.aiReviewStatus === "skipped");
 
   async function handleImageSelected(file: File | undefined) {
     if (!file) return;
@@ -84,6 +82,9 @@ export default function QuestionEditor({ courses, initial, currentUserId, onCanc
       documentId: initial?.documentId,
       ownerId: initial?.ownerId ?? currentUserId,
       visibility,
+      aiReviewStatus: skipReview ? ("skipped" as const) : ("unreviewed" as const),
+      aiReviewNote: skipReview ? undefined : initial?.aiReviewNote,
+      aiReviewDisputed: false,
     };
     if (type === "multiple_choice") return { ...base, options, correctAnswer };
     if (type === "true_false") return { ...base, statements };
@@ -97,65 +98,13 @@ export default function QuestionEditor({ courses, initial, currentUserId, onCanc
   }
 
   /**
-   * Trước khi lưu câu hỏi thủ công, nhờ AI kiểm tra nhanh đề bài + đáp
-   * án có hợp lý/chính xác không — tránh câu hỏi sai lọt vào ngân hàng.
-   * Nếu server AI đang lỗi (không phải do nội dung sai), vẫn cho lưu
-   * kèm cảnh báo, để không chặn công việc khi hạ tầng gặp sự cố.
+   * Lưu ngay, KHÔNG chờ AI kiểm tra (AI sẽ rà soát nội dung sau, ở nền,
+   * lúc rảnh — xem QuestionsPage: nút "🔍 Rà soát bằng AI"). Nếu người
+   * tạo tự tin câu hỏi đúng, có thể tick "bỏ qua kiểm tra" để AI không
+   * bao giờ đụng tới câu này.
    */
-  async function handleSubmit() {
+  function handleSubmit() {
     if (!canSave) return;
-    if (skipValidation) {
-      setSkipValidation(false);
-      setValidationError(null);
-      onSave(buildPayload());
-      return;
-    }
-    setValidationError(null);
-    setValidating(true);
-    try {
-      const res = await fetch("/api/validate-question", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          question: question.trim(),
-          type,
-          options: type === "multiple_choice" ? options : undefined,
-          correctAnswer: type === "multiple_choice" ? correctAnswer : undefined,
-          statements: type === "true_false" ? statements : undefined,
-          acceptedAnswers:
-            type === "short_answer"
-              ? acceptedAnswers.split(",").map((s) => s.trim()).filter(Boolean)
-              : undefined,
-          courseName: course?.name,
-          topic: topic.trim(),
-        }),
-      });
-      const raw = await res.text();
-      let data: { valid?: boolean; reason?: string; error?: string };
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        data = {};
-      }
-
-      if (res.ok && data.valid === false) {
-        setValidationError(`❌ Sai: ${data.reason || "AI cho rằng câu hỏi này chưa chính xác."}`);
-        setValidating(false);
-        return;
-      }
-      if (!res.ok && data.error) {
-        setValidationError(`⚠️ Không kiểm tra được bằng AI (${data.error}). Bấm "Lưu câu hỏi" lần nữa để lưu mà không cần AI kiểm tra.`);
-        setSkipValidation(true);
-        setValidating(false);
-        return;
-      }
-    } catch {
-      setValidationError('⚠️ Không kết nối được AI để kiểm tra. Bấm "Lưu câu hỏi" lần nữa để lưu mà không cần AI kiểm tra.');
-      setSkipValidation(true);
-      setValidating(false);
-      return;
-    }
-    setValidating(false);
     onSave(buildPayload());
   }
 
@@ -321,17 +270,31 @@ export default function QuestionEditor({ courses, initial, currentUserId, onCanc
         <Textarea rows={2} value={explanation} onChange={(e) => setExplanation(e.target.value)} />
       </FieldGroup>
 
+      <label className="flex items-start gap-2.5 text-sm text-ash-300 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={skipReview}
+          onChange={(e) => setSkipReview(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-cue"
+        />
+        <span>
+          ✅ Tôi chắc chắn câu này đúng — bỏ qua AI rà soát
+          <br />
+          <span className="text-xs text-ash-500">
+            Nếu không tick, AI sẽ rà soát câu này trong nền lúc rảnh; nếu phát hiện nghi vấn sẽ đánh dấu để bạn
+            (hoặc admin) xem lại — câu hỏi vẫn được dùng bình thường trong lúc chờ.
+          </span>
+        </span>
+      </label>
+
       <div className="flex items-center gap-2 pt-1">
-        <Button onClick={handleSubmit} disabled={!canSave || validating}>
-          {validating ? "🧠 AI đang kiểm tra..." : skipValidation ? "Lưu (không kiểm tra AI)" : "Lưu câu hỏi"}
+        <Button onClick={handleSubmit} disabled={!canSave}>
+          Lưu câu hỏi
         </Button>
         <Button variant="ghost" onClick={onCancel}>
           Hủy
         </Button>
       </div>
-      {validationError && (
-        <p className="text-xs text-signal-live mt-2">{validationError}</p>
-      )}
     </Card>
   );
 }

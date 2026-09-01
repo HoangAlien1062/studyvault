@@ -14,6 +14,7 @@ import ExamsPage from "./pages/exams/ExamsPage";
 import LoginPage from "./pages/LoginPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccountPage from "./pages/AccountPage";
+import DuelInvitePage from "./pages/DuelInvitePage";
 import QuestionsPage from "./pages/exams/QuestionsPage";
 import CreateExamPage from "./pages/exams/CreateExamPage";
 import TakeExamPage from "./pages/exams/TakeExamPage";
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route path="/duel/:duelId" element={<DuelInvitePage />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/courses/:courseId" element={<CourseDetail />} />
         <Route path="/courses/:courseId/teachers" element={<CourseDetail />} />

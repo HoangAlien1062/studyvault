@@ -32,6 +32,31 @@ export default function QuestionsPage() {
   const [addMode, setAddMode] = useState<AddMode>("ai");
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null);
+
+  async function handleRunReview() {
+    setReviewing(true);
+    setReviewNotice(null);
+    try {
+      const res = await fetch("/api/review-questions", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setReviewNotice(`⚠️ ${data.error || "Rà soát thất bại."}`);
+      } else if (data.reviewed === 0) {
+        setReviewNotice("✅ Không có câu nào cần rà soát.");
+      } else {
+        setReviewNotice(
+          `✅ Đã rà soát ${data.reviewed} câu — ${data.passed} ổn, ${data.flagged} bị đánh dấu nghi vấn.` +
+            (data.remaining > 0 ? ` Còn ${data.remaining} câu chưa rà soát, bấm lại để tiếp tục.` : "")
+        );
+      }
+    } catch (err) {
+      setReviewNotice(`⚠️ ${(err as Error).message}`);
+    } finally {
+      setReviewing(false);
+    }
+  }
 
   // Ai cũng thấy được câu hỏi công khai (visibility !== "private"); câu
   // hỏi riêng tư chỉ chủ sở hữu và admin thấy. Dữ liệu cũ chưa có
@@ -99,6 +124,11 @@ export default function QuestionsPage() {
         <h1 className="text-xl font-display font-bold text-ash-200">Ngân hàng câu hỏi</h1>
         {!showForm && (
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button variant="secondary" disabled={reviewing} onClick={handleRunReview}>
+                {reviewing ? "🧠 Đang rà soát..." : "🔍 Rà soát bằng AI"}
+              </Button>
+            )}
             {selectMode ? (
               <Button variant="ghost" onClick={exitSelectMode}>
                 Hủy chọn
@@ -112,6 +142,12 @@ export default function QuestionsPage() {
           </div>
         )}
       </div>
+
+      {reviewNotice && (
+        <div className="rounded-lg border border-ink-600 bg-ink-800/60 px-4 py-2.5 text-sm text-ash-300">
+          {reviewNotice}
+        </div>
+      )}
 
       {selectMode && !showForm && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink-600 bg-ink-800/60 px-4 py-3">
@@ -282,6 +318,9 @@ export default function QuestionsPage() {
                     isAdmin && q.status !== "published"
                       ? () => updateQuestion(q.id, { status: "published" })
                       : undefined
+                  }
+                  onDispute={
+                    canManage(q) ? () => updateQuestion(q.id, { aiReviewDisputed: true }) : undefined
                   }
                   isOwner={q.ownerId === user?.id}
                   selectable={selectMode}

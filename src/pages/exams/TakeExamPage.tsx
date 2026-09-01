@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import MathText from "../../components/ui/MathText";
@@ -7,7 +7,7 @@ import ExamTimer from "../../components/exams/ExamTimer";
 import QuestionAnswerInput from "../../components/exams/QuestionAnswerInput";
 import { useExamData, useExamDataReady, useMyExamAttemptIds } from "../../hooks/useExamData";
 import { useAuth } from "../../hooks/useAuth";
-import { saveAttempt } from "../../lib/examStore";
+import { saveAttempt, joinDuel } from "../../lib/examStore";
 import { gradeExam } from "../../lib/examScoring";
 import { clearExamDraft, loadExamDraft, saveExamDraft } from "../../lib/examDraft";
 import { getCourse } from "../../lib/catalog";
@@ -29,6 +29,8 @@ function seededShuffle<T>(items: T[], seed: string): T[] {
 
 export default function TakeExamPage() {
   const { examId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const duelId = searchParams.get("duel") || undefined;
   const navigate = useNavigate();
   const ready = useExamDataReady();
   const { exams, questions } = useExamData();
@@ -53,7 +55,6 @@ export default function TakeExamPage() {
     );
   }, [exam, questions, examId]);
 
-  const [name] = useState(displayName);
   const [started, setStarted] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [current, setCurrent] = useState(0);
@@ -75,11 +76,11 @@ export default function TakeExamPage() {
     if (!started || !startedAt || !exam) return;
     saveExamDraft({
       examId,
-      displayName: name,
+      displayName,
       startedAt,
       answers: Object.values(answers),
     });
-  }, [started, startedAt, exam, examId, name, answers]);
+  }, [started, startedAt, exam, examId, displayName, answers]);
 
   if (!ready || authLoading) return <div className="container-page py-10 text-sm text-ash-500">Đang tải...</div>;
 
@@ -128,15 +129,21 @@ export default function TakeExamPage() {
     if (!startedAt || !exam) return;
     const graded = gradeExam({
       examId: exam.id,
-      displayName: name.trim() || "Học sinh",
+      displayName,
       questions: orderedQuestions,
       answers: Object.values(answers),
       startedAt,
       submittedAt: Date.now(),
     });
-    const attempt = saveAttempt(graded);
+    const attempt = saveAttempt({ ...graded, userId: user?.id, duelId });
     addMyAttemptId(attempt.id);
     clearExamDraft(examId);
+    if (duelId && user) {
+      // Bài làm này là lượt của đối thủ trong 1 cuộc thách đấu — nối kết quả vào Duel.
+      joinDuel(duelId, user.id, displayName, attempt.id);
+      navigate(`/duel/${duelId}`);
+      return;
+    }
     navigate(`/exams/${examId}/result/${attempt.id}`);
   }
 
@@ -161,7 +168,7 @@ export default function TakeExamPage() {
             <p className="text-xs text-signal-live">⚠️ Thời gian sẽ bắt đầu ngay khi bạn nhấn bắt đầu.</p>
           )}
           <p className="text-sm text-ash-400">
-            Làm bài với tên: <span className="text-ash-200 font-medium">{name}</span>
+            Làm bài với tên: <span className="text-ash-200 font-medium">{displayName}</span>
           </p>
           <Button className="w-full" size="md" onClick={handleStart}>
             Bắt đầu làm bài

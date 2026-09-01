@@ -66,6 +66,12 @@ export interface Question {
   documentId?: string;
   ownerId?: string; // user_id của người tạo — dùng để phân quyền sửa/xóa
   visibility?: "public" | "private"; // mặc định coi như "public" nếu không set (dữ liệu cũ)
+  // AI rà soát trong lúc rảnh (không chặn lúc lưu câu hỏi):
+  //   unreviewed = chưa rà soát, flagged = AI nghi ngờ sai, passed = AI xác nhận ổn,
+  //   skipped = người tạo tự tin bỏ qua kiểm tra AI
+  aiReviewStatus?: "unreviewed" | "flagged" | "passed" | "skipped";
+  aiReviewNote?: string; // lý do AI cho là sai (khi flagged)
+  aiReviewDisputed?: boolean; // người tạo không đồng ý với AI, cần admin xem lại
   createdAt: number;
 }
 
@@ -103,6 +109,8 @@ export interface ExamAttempt {
   id: string;
   examId: string;
   displayName: string;
+  userId?: string; // user_id thật (nếu đã đăng nhập) — dùng để nối vào Duel/thách đấu
+  duelId?: string; // nếu bài làm này là 1 lượt trong 1 cuộc thách đấu (Duel)
 
   earnedPoints: number;
   maxPoints: number;
@@ -118,6 +126,20 @@ export interface ExamAttempt {
   startedAt: number;
   submittedAt: number;
   timeSpentSeconds: number;
+}
+
+// ---- Thách đấu Solo (1 vs 1, không đồng bộ — cùng làm 1 đề, so điểm sau) ----
+export interface Duel {
+  id: string;
+  examId: string;
+  challengerId: string;
+  challengerName: string;
+  challengerAttemptId?: string;
+  opponentId?: string;
+  opponentName?: string;
+  opponentAttemptId?: string;
+  status: "waiting" | "completed";
+  createdAt: number;
 }
 
 // ---- Đề mẫu (bảng điểm Đúng/Sai — quy tắc bắt buộc, KHÔNG tuyến tính) ----

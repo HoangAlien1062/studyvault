@@ -1,15 +1,21 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Breadcrumb from "../../components/layout/Breadcrumb";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import ResultReviewCard from "../../components/exams/ResultReviewCard";
 import { useExamData, useExamDataReady } from "../../hooks/useExamData";
+import { useAuth } from "../../hooks/useAuth";
+import { createDuel } from "../../lib/examStore";
 
 export default function ExamResultPage() {
   const { examId = "", attemptId = "" } = useParams();
   const navigate = useNavigate();
   const ready = useExamDataReady();
   const { exams, questions, attempts } = useExamData();
+  const { user, profile } = useAuth();
+  const [duelLink, setDuelLink] = useState<string | null>(null);
+  const [creatingDuel, setCreatingDuel] = useState(false);
 
   if (!ready) return <div className="container-page py-10 text-sm text-ash-500">Đang tải...</div>;
 
@@ -63,7 +69,25 @@ export default function ExamResultPage() {
             <p className="text-xs text-ash-500">Thời gian</p>
           </div>
         </div>
-        <div className="flex gap-2 justify-center pt-2">
+        <div className="flex gap-2 justify-center pt-2 flex-wrap">
+          {user && !attempt.duelId && (
+            <Button
+              disabled={creatingDuel}
+              onClick={() => {
+                setCreatingDuel(true);
+                const duel = createDuel({
+                  examId: attempt.examId,
+                  challengerId: user.id,
+                  challengerName: profile?.display_name || user.email?.split("@")[0] || "Học sinh",
+                  challengerAttemptId: attempt.id,
+                });
+                setDuelLink(`${window.location.origin}/duel/${duel.id}`);
+                setCreatingDuel(false);
+              }}
+            >
+              ⚔ Thách đấu bạn bè
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => navigate("/exams/leaderboard")}>
             🏆 Xếp hạng
           </Button>
@@ -71,6 +95,19 @@ export default function ExamResultPage() {
             Lịch sử kiểm tra
           </Button>
         </div>
+        {duelLink && (
+          <div className="flex gap-2 items-center justify-center pt-1">
+            <input
+              readOnly
+              value={duelLink}
+              onFocus={(e) => e.target.select()}
+              className="max-w-xs rounded-lg bg-ink-800 border border-ink-600 px-3 py-2 text-xs text-ash-300"
+            />
+            <Button size="sm" onClick={() => navigator.clipboard?.writeText(duelLink)}>
+              Copy link
+            </Button>
+          </div>
+        )}
       </Card>
 
       <div className="space-y-4">

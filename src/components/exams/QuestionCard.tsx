@@ -12,6 +12,7 @@ interface QuestionCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onApprove?: () => void;
+  onDispute?: () => void;
   isOwner?: boolean;
   selectable?: boolean;
   selected?: boolean;
@@ -23,6 +24,7 @@ export default function QuestionCard({
   onEdit,
   onDelete,
   onApprove,
+  onDispute,
   isOwner,
   selectable,
   selected,
@@ -53,7 +55,30 @@ export default function QuestionCard({
         {question.status === "reviewed" && <Badge tone="cue">Đã xem, chưa publish</Badge>}
         {question.visibility === "private" && <Badge>🔒 Riêng tư</Badge>}
         {isOwner && <Badge tone="cue">Của bạn</Badge>}
+        {(!question.aiReviewStatus || question.aiReviewStatus === "unreviewed") && (
+          <Badge>⏳ Chờ AI rà soát</Badge>
+        )}
+        {question.aiReviewStatus === "flagged" && !question.aiReviewDisputed && (
+          <Badge tone="live">🚩 AI nghi ngờ sai</Badge>
+        )}
+        {question.aiReviewStatus === "flagged" && question.aiReviewDisputed && (
+          <Badge tone="live">🚩 Chờ admin xem lại</Badge>
+        )}
       </div>
+
+      {question.aiReviewStatus === "flagged" && question.aiReviewNote && (
+        <div className="rounded-lg border border-signal-live/30 bg-signal-live/10 px-3.5 py-2.5 text-xs text-ash-300">
+          <p className="text-signal-live font-medium mb-1">🚩 AI nghi ngờ câu này có vấn đề:</p>
+          <p>{question.aiReviewNote}</p>
+          {!question.aiReviewDisputed && (isOwner || Boolean(onEdit)) && onDispute && (
+            <div className="flex gap-2 mt-2">
+              <Button variant="ghost" size="sm" onClick={onDispute}>
+                Tôi chắc chắn đúng — báo admin xem lại
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <p className="text-sm text-ash-200 leading-relaxed">
         <MathText text={question.question} />
