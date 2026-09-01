@@ -168,6 +168,267 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 
+
+-- ============================================================
+-- 4) COIN AN TOÀN (ATOMIC) + NHIỆM VỤ + CƯỢC SOLO (mục 4, 5)
+--    Nguồn: supabase/coins_v2_schema.sql
+-- ============================================================
+
+create or replace function public.apply_coin_delta(p_user_id uuid, p_delta integer)
+returns table (ok boolean, new_balance integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_new integer;
+begin
+  if p_delta >= 0 then
+    update public.profiles
+      set coins = coins + p_delta
+      where user_id = p_user_id
+      returning coins into v_new;
+    return query select true, v_new;
+  else
+    update public.profiles
+      set coins = coins + p_delta
+      where user_id = p_user_id and coins >= (-p_delta)
+      returning coins into v_new;
+    if v_new is null then
+      return query select false, (select coins from public.profiles where user_id = p_user_id);
+    else
+      return query select true, v_new;
+    end if;
+  end if;
+end;
+$$;
+
+grant execute on function public.apply_coin_delta(uuid, integer) to authenticated;
+
+-- 2) Nhiệm vụ — cấu hình dạng bảng, không hard-code trong code.
+create table if not exists public.missions (
+  id text primary key,               -- vd 'exam_complete', 'question_approved'
+  label text not null,                -- hiển thị cho user
+  coin_reward integer not null,
+  active boolean not null default true
+);
+
+insert into public.missions (id, label, coin_reward) values
+  ('exam_complete', 'Hoàn thành 1 đề kiểm tra', 5),
+  ('question_approved', 'Tạo 1 câu hỏi được duyệt (không bị AI flagged)', 2)
+on conflict (id) do nothing;
+
+alter table public.missions enable row level security;
+drop policy if exists "Missions are viewable by everyone" on public.missions;
+create policy "Missions are viewable by everyone"
+  on public.missions for select
+  using (true);
+-- Chỉ admin sửa cấu hình nhiệm vụ (thực hiện qua service role / trang admin).
+
+-- Log các lần nhận thưởng nhiệm vụ, để không phát thưởng trùng cho
+-- cùng 1 sự kiện (vd cùng 1 attempt / cùng 1 câu hỏi).
+create table if not exists public.mission_claims (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  mission_id text not null references public.missions(id),
+  ref_id text not null,               -- vd attempt.id hoặc question.id
+  coins_awarded integer not null,
+  created_at timestamptz not null default now(),
+  unique (mission_id, ref_id)
+);
+
+alter table public.mission_claims enable row level security;
+drop policy if exists "Users see own mission claims" on public.mission_claims;
+create policy "Users see own mission claims"
+  on public.mission_claims for select
+  using (auth.uid() = user_id);
+drop policy if exists "Users insert own mission claims" on public.mission_claims;
+create policy "Users insert own mission claims"
+  on public.mission_claims for insert
+  with check (auth.uid() = user_id);
+
+-- 2b) Nhận thưởng nhiệm vụ nguyên tử + idempotent, chạy security definer
+--     nên gọi được cả từ client (đã đăng nhập) lẫn từ worker phía server
+--     (anon key, không có auth.uid() — vd khi AI duyệt câu hỏi cho người
+--     khác) mà không cần nới lỏng RLS trực tiếp trên mission_claims.
+create or replace function public.claim_mission(p_user_id uuid, p_mission_id text, p_ref_id text, p_coins integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.mission_claims (user_id, mission_id, ref_id, coins_awarded)
+  values (p_user_id, p_mission_id, p_ref_id, p_coins)
+  on conflict (mission_id, ref_id) do nothing;
+
+  if not found then
+    return false; -- đã claim trước đó, không cộng trùng
+  end if;
+
+  update public.profiles set coins = coins + p_coins where user_id = p_user_id;
+  return true;
+end;
+$$;
+
+grant execute on function public.claim_mission(uuid, text, text, integer) to anon, authenticated;
+
+-- 3) Solo (Duel) cược coin — lưu cùng ai đã cược bao nhiêu, tránh trừ 2 lần.
+alter table public.exam_content
+  add column if not exists updated_at timestamptz not null default now();
+
+-- Duel object đã nằm trong exam_content (JSON blob dùng chung toàn app).
+-- Thêm bảng riêng để khóa việc trừ coin theo từng duel + user, atomic:
+create table if not exists public.duel_stakes (
+  duel_id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  amount integer not null default 5,
+  charged boolean not null default false,
+  refunded boolean not null default false,
+  created_at timestamptz not null default now(),
+  primary key (duel_id, user_id)
+);
+
+alter table public.duel_stakes enable row level security;
+drop policy if exists "Users manage own duel stakes" on public.duel_stakes;
+create policy "Users manage own duel stakes"
+  on public.duel_stakes for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+
+-- ============================================================
+-- 5) HÀNG ĐỢI AI ĐA WORKER (mục 2, 6)
+--    Nguồn: supabase/ai_jobs_schema.sql
+-- ============================================================
+
+create table if not exists public.ai_jobs (
+  id uuid primary key default gen_random_uuid(),
+  job_type text not null,             -- 'review_question' | 'review_dispute' | 'generate_questions' | 'analyze_document'
+  payload jsonb not null default '{}'::jsonb,
+  status text not null default 'pending', -- pending | running | done | error
+  error_message text,
+  attempts integer not null default 0,
+  created_at timestamptz not null default now(),
+  claimed_at timestamptz,
+  finished_at timestamptz
+);
+
+create index if not exists ai_jobs_status_idx on public.ai_jobs (status, created_at);
+
+alter table public.ai_jobs enable row level security;
+-- exam_content hiện đang cho đọc/ghi công khai (demo, chưa có auth thật
+-- ở tầng RLS) — giữ cùng mức để không chặn worker chạy bằng anon key,
+-- như review-questions.ts hiện tại đang làm.
+drop policy if exists "Public read ai_jobs" on public.ai_jobs;
+create policy "Public read ai_jobs" on public.ai_jobs for select using (true);
+drop policy if exists "Public insert ai_jobs" on public.ai_jobs;
+create policy "Public insert ai_jobs" on public.ai_jobs for insert with check (true);
+drop policy if exists "Public update ai_jobs" on public.ai_jobs;
+create policy "Public update ai_jobs" on public.ai_jobs for update using (true);
+
+-- Nhận 1 job đang "pending", khóa bằng for update skip locked để nhiều
+-- worker gọi cùng lúc không giành nhau job. Việc treo quá lâu (running
+-- > p_stale_minutes) được coi là lỗi và trả lại "pending" TRƯỚC khi
+-- chọn job mới, để không bị kẹt hàng đợi.
+create or replace function public.claim_next_ai_job(p_stale_minutes integer default 10)
+returns public.ai_jobs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_job public.ai_jobs;
+begin
+  update public.ai_jobs
+    set status = 'pending', error_message = coalesce(error_message, '') || ' [timeout, trả lại hàng đợi]'
+    where status = 'running' and claimed_at < now() - (p_stale_minutes || ' minutes')::interval;
+
+  select * into v_job
+    from public.ai_jobs
+    where status = 'pending'
+    order by created_at
+    for update skip locked
+    limit 1;
+
+  if v_job.id is null then
+    return null;
+  end if;
+
+  update public.ai_jobs
+    set status = 'running', claimed_at = now(), attempts = attempts + 1
+    where id = v_job.id
+    returning * into v_job;
+
+  return v_job;
+end;
+$$;
+
+grant execute on function public.claim_next_ai_job(integer) to anon, authenticated;
+
+create or replace function public.complete_ai_job(p_job_id uuid)
+returns void language sql security definer set search_path = public as $$
+  update public.ai_jobs set status = 'done', finished_at = now() where id = p_job_id;
+$$;
+
+create or replace function public.fail_ai_job(p_job_id uuid, p_error text)
+returns void language sql security definer set search_path = public as $$
+  update public.ai_jobs set status = 'error', error_message = p_error, finished_at = now() where id = p_job_id;
+$$;
+
+grant execute on function public.complete_ai_job(uuid) to anon, authenticated;
+grant execute on function public.fail_ai_job(uuid, text) to anon, authenticated;
+
+-- Ghi kết quả rà soát cho ĐÚNG 1 câu hỏi bên trong exam_content.data.questions
+-- (mảng JSON) bằng 1 câu UPDATE nguyên tử duy nhất (không đọc-rồi-ghi-đè ở
+-- client) — nhiều worker cùng gọi hàm này cho các câu hỏi KHÁC NHAU sẽ
+-- không đè mất kết quả của nhau, vì mỗi lệnh UPDATE tính lại jsonb mới
+-- nhất tại đúng thời điểm nó chạy trong transaction riêng của nó.
+create or replace function public.apply_question_ai_review(
+  p_question_id text,
+  p_status text,       -- 'passed' | 'flagged'
+  p_note text,
+  p_clear_dispute boolean default false
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_questions jsonb;
+  v_updated jsonb;
+  v_idx integer;
+begin
+  select (data->'questions') into v_questions from public.exam_content where id = 'main' for update;
+  if v_questions is null then
+    return;
+  end if;
+
+  select ord - 1 into v_idx
+    from jsonb_array_elements(v_questions) with ordinality as t(elem, ord)
+    where elem->>'id' = p_question_id
+    limit 1;
+
+  if v_idx is null then
+    return;
+  end if;
+
+  v_updated := jsonb_set(v_questions, array[v_idx::text, 'aiReviewStatus'], to_jsonb(p_status), true);
+  v_updated := jsonb_set(v_updated, array[v_idx::text, 'aiReviewNote'], to_jsonb(coalesce(p_note, '')), true);
+  if p_clear_dispute then
+    v_updated := jsonb_set(v_updated, array[v_idx::text, 'aiReviewDisputed'], to_jsonb(false), true);
+  end if;
+
+  update public.exam_content
+    set data = jsonb_set(data, '{questions}', v_updated, true), updated_at = now()
+    where id = 'main';
+end;
+$$;
+
+grant execute on function public.apply_question_ai_review(text, text, text, boolean) to anon, authenticated;
+
+
 -- ============================================================
 -- ⚠️ BƯỚC CUỐI — CHỈ LÀM 1 LẦN, THỦ CÔNG:
 -- Sau khi bạn đã đăng ký tài khoản đầu tiên qua trang /login, chạy
@@ -176,6 +437,8 @@ create trigger on_auth_user_created
 --   update public.profiles set is_admin = true
 --   where user_id = (select id from auth.users where email = 'ban@vidu.com');
 --
--- Chỉ tài khoản is_admin = true mới vào được /admin và
--- /exams/questions, /exams/create (ngân hàng câu hỏi + tạo đề).
+-- Chỉ tài khoản is_admin = true mới vào được /admin (quản trị nội
+-- dung khóa học). /exams/questions và /exams/create giờ mở cho MỌI
+-- user đã đăng nhập (mục 1) — admin chỉ có thêm toàn quyền sửa/xóa/
+-- xem nội dung của người khác, kể cả private.
 -- ============================================================

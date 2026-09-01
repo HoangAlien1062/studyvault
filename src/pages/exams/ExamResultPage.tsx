@@ -7,6 +7,7 @@ import ResultReviewCard from "../../components/exams/ResultReviewCard";
 import { useExamData, useExamDataReady } from "../../hooks/useExamData";
 import { useAuth } from "../../hooks/useAuth";
 import { createDuel } from "../../lib/examStore";
+import { chargeSoloStake, SOLO_STAKE } from "../../lib/coins";
 
 export default function ExamResultPage() {
   const { examId = "", attemptId = "" } = useParams();
@@ -16,6 +17,7 @@ export default function ExamResultPage() {
   const { user, profile } = useAuth();
   const [duelLink, setDuelLink] = useState<string | null>(null);
   const [creatingDuel, setCreatingDuel] = useState(false);
+  const [duelError, setDuelError] = useState<string | null>(null);
 
   if (!ready) return <div className="container-page py-10 text-sm text-ash-500">Đang tải...</div>;
 
@@ -73,19 +75,26 @@ export default function ExamResultPage() {
           {user && !attempt.duelId && (
             <Button
               disabled={creatingDuel}
-              onClick={() => {
+              onClick={async () => {
                 setCreatingDuel(true);
+                setDuelError(null);
                 const duel = createDuel({
                   examId: attempt.examId,
                   challengerId: user.id,
                   challengerName: profile?.display_name || user.email?.split("@")[0] || "Học sinh",
                   challengerAttemptId: attempt.id,
                 });
+                const { ok, balance } = await chargeSoloStake(user.id, duel.id);
+                if (!ok) {
+                  setDuelError(`Cần ${SOLO_STAKE} coin để thách đấu, bạn hiện có ${balance ?? profile?.coins ?? 0} coin.`);
+                  setCreatingDuel(false);
+                  return;
+                }
                 setDuelLink(`${window.location.origin}/duel/${duel.id}`);
                 setCreatingDuel(false);
               }}
             >
-              ⚔ Thách đấu bạn bè
+              ⚔ Thách đấu bạn bè (tốn {SOLO_STAKE} 🪙)
             </Button>
           )}
           <Button variant="secondary" onClick={() => navigate("/exams/leaderboard")}>
@@ -95,6 +104,7 @@ export default function ExamResultPage() {
             Lịch sử kiểm tra
           </Button>
         </div>
+        {duelError && <p className="text-sm text-signal-danger">⚠️ {duelError}</p>}
         {duelLink && (
           <div className="flex gap-2 items-center justify-center pt-1">
             <input

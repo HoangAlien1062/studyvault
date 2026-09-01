@@ -8,7 +8,7 @@ import QuestionAnswerInput from "../../components/exams/QuestionAnswerInput";
 import { useExamData, useExamDataReady, useMyExamAttemptIds } from "../../hooks/useExamData";
 import { useAuth } from "../../hooks/useAuth";
 import { saveAttempt, joinDuel } from "../../lib/examStore";
-import { awardCoins, calcCoinsForAttempt } from "../../lib/coins";
+import { claimExamCompleteReward, settleDuelStakes } from "../../lib/coins";
 import { notifyStorageChange } from "../../lib/storage";
 import { gradeExam } from "../../lib/examScoring";
 import { clearExamDraft, loadExamDraft, saveExamDraft } from "../../lib/examDraft";
@@ -35,7 +35,7 @@ export default function TakeExamPage() {
   const duelId = searchParams.get("duel") || undefined;
   const navigate = useNavigate();
   const ready = useExamDataReady();
-  const { exams, questions } = useExamData();
+  const { exams, questions, duels, attempts } = useExamData();
   const { user, profile, loading: authLoading } = useAuth();
   const { addMyAttemptId } = useMyExamAttemptIds();
 
@@ -141,11 +141,27 @@ export default function TakeExamPage() {
     addMyAttemptId(attempt.id);
     clearExamDraft(examId);
     if (user) {
-      awardCoins(user.id, calcCoinsForAttempt(graded.normalizedScore)).then(() => notifyStorageChange());
+      // Mức cố định +5 coin/lần hoàn thành (mục 4) — idempotent theo attempt.id
+      // nên nếu component re-render/gọi lại không bị cộng trùng.
+      claimExamCompleteReward(user.id, attempt.id).then(() => notifyStorageChange());
     }
     if (duelId && user) {
       // Bài làm này là lượt của đối thủ trong 1 cuộc thách đấu — nối kết quả vào Duel.
       joinDuel(duelId, user.id, displayName, attempt.id);
+      const duel = duels.find((d) => d.id === duelId);
+      if (duel) {
+        const challengerAttempt = attempts.find((a) => a.id === duel.challengerAttemptId);
+        // Mục 5: thắng nhận x2 cược, thua mất cược, hòa (điểm + thời gian) hoàn lại cả 2.
+        settleDuelStakes(
+          duel.challengerId,
+          user.id,
+          duelId,
+          challengerAttempt?.normalizedScore ?? 0,
+          graded.normalizedScore,
+          challengerAttempt?.timeSpentSeconds ?? 0,
+          graded.timeSpentSeconds
+        ).then(() => notifyStorageChange());
+      }
       navigate(`/duel/${duelId}`);
       return;
     }

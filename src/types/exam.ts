@@ -72,6 +72,7 @@ export interface Question {
   aiReviewStatus?: "unreviewed" | "flagged" | "passed" | "skipped";
   aiReviewNote?: string; // lý do AI cho là sai (khi flagged)
   aiReviewDisputed?: boolean; // người tạo không đồng ý với AI, cần admin xem lại
+  aiReviewDisputeNote?: string; // giải thích ngắn của người tạo khi phản bác
   createdAt: number;
 }
 

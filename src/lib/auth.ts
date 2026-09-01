@@ -3,7 +3,7 @@
 //
 // Thay cho lớp "mật khẩu admin dùng chung" cũ (adminAuth.ts).
 // Mỗi người giờ có tài khoản riêng; quyền admin được đánh dấu bằng
-// cột is_admin trong bảng "profiles" (xem supabase/exam_schema.sql).
+// cột is_admin trong bảng "profiles" (xem supabase/setup.sql).
 //
 // Nếu chưa cấu hình Supabase (.env.local thiếu), auth sẽ không hoạt
 // động — các hàm dưới đây trả lỗi rõ ràng thay vì crash.

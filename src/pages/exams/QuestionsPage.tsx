@@ -9,6 +9,7 @@ import BulkQuestionImport from "../../components/exams/BulkQuestionImport";
 import AIQuestionGenerator from "../../components/exams/AIQuestionGenerator";
 import { useExamData, useExamDataReady } from "../../hooks/useExamData";
 import { createQuestion, deleteQuestion, deleteQuestions, updateQuestion } from "../../lib/examStore";
+import { enqueueDisputeReview } from "../../lib/aiJobs";
 import { useCoursesForExams } from "../../hooks/useUserData";
 import { useAuth } from "../../hooks/useAuth";
 import type { Question } from "../../types/exam";
@@ -320,7 +321,19 @@ export default function QuestionsPage() {
                       : undefined
                   }
                   onDispute={
-                    canManage(q) ? () => updateQuestion(q.id, { aiReviewDisputed: true }) : undefined
+                    canManage(q)
+                      ? () => {
+                          const note = window.prompt(
+                            "Vì sao bạn cho là câu này đúng? (AI sẽ xem lại kèm giải thích của bạn)",
+                            ""
+                          );
+                          if (note === null) return; // bấm Hủy
+                          // aiReviewDisputed=true là trạng thái "đang chờ AI/admin xem lại lần 2"
+                          // (tương đương "disputed" trong spec) — câu hỏi vẫn dùng được bình thường.
+                          updateQuestion(q.id, { aiReviewDisputed: true, aiReviewDisputeNote: note.trim() });
+                          enqueueDisputeReview({ ...q, aiReviewDisputeNote: note.trim() }, note.trim());
+                        }
+                      : undefined
                   }
                   isOwner={q.ownerId === user?.id}
                   selectable={selectMode}

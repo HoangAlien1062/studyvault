@@ -4,6 +4,7 @@ import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import { useExamData, useExamDataReady } from "../hooks/useExamData";
 import { useAuth } from "../hooks/useAuth";
+import { chargeSoloStake, SOLO_STAKE } from "../lib/coins";
 
 export default function DuelInvitePage() {
   const { duelId = "" } = useParams();
@@ -12,6 +13,8 @@ export default function DuelInvitePage() {
   const { duels, exams, attempts } = useExamData();
   const { user, profile, loading: authLoading } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
 
   if (!ready || authLoading) return <div className="container-page py-16 text-center text-sm text-ash-500">Đang tải...</div>;
 
@@ -142,11 +145,28 @@ export default function DuelInvitePage() {
               <strong className="text-ash-200">{exam?.title ?? "?"}</strong>!
             </p>
             <p className="text-xs text-ash-500">Điểm của bạn sẽ được so với điểm của {duel.challengerName} sau khi bạn làm xong.</p>
+            <p className="text-xs text-ash-400">
+              Trận này tốn <strong className="text-cue">{SOLO_STAKE} 🪙</strong> — số dư của bạn:{" "}
+              <strong className="text-ash-200">{profile?.coins ?? 0} 🪙</strong>. Thắng nhận lại{" "}
+              {SOLO_STAKE * 2} 🪙, thua mất {SOLO_STAKE} 🪙, hòa được hoàn lại.
+            </p>
+            {acceptError && <p className="text-xs text-signal-danger">⚠️ {acceptError}</p>}
             <Button
               className="w-full"
-              onClick={() => navigate(`/exams/${duel.examId}?duel=${duel.id}`)}
+              disabled={accepting}
+              onClick={async () => {
+                setAccepting(true);
+                setAcceptError(null);
+                const { ok, balance } = await chargeSoloStake(user.id, duel.id);
+                if (!ok) {
+                  setAcceptError(`Cần ${SOLO_STAKE} coin để chấp nhận, bạn hiện có ${balance ?? profile?.coins ?? 0} coin.`);
+                  setAccepting(false);
+                  return;
+                }
+                navigate(`/exams/${duel.examId}?duel=${duel.id}`);
+              }}
             >
-              Chấp nhận & làm bài
+              {accepting ? "Đang xử lý..." : `Chấp nhận & làm bài (tốn ${SOLO_STAKE} 🪙)`}
             </Button>
           </>
         )}

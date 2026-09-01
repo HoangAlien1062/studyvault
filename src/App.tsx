@@ -28,6 +28,7 @@ import AdminTeachers from "./pages/admin/AdminTeachers";
 import AdminChapters from "./pages/admin/AdminChapters";
 import AdminLessons from "./pages/admin/AdminLessons";
 import AdminGate from "./components/admin/AdminGate";
+import RequireAuth from "./components/admin/RequireAuth";
 import NotFound from "./pages/NotFound";
 import { useContentReady } from "./hooks/useUserData";
 import { siteConfig } from "./config/site";
@@ -74,25 +75,25 @@ export default function App() {
         <Route
           path="/exams/questions"
           element={
-            <AdminGate>
+            <RequireAuth>
               <QuestionsPage />
-            </AdminGate>
+            </RequireAuth>
           }
         />
         <Route
           path="/exams/create"
           element={
-            <AdminGate>
+            <RequireAuth>
               <CreateExamPage />
-            </AdminGate>
+            </RequireAuth>
           }
         />
         <Route
           path="/exams/edit/:examId"
           element={
-            <AdminGate>
+            <RequireAuth>
               <CreateExamPage />
-            </AdminGate>
+            </RequireAuth>
           }
         />
         <Route path="/exams/history" element={<ExamHistoryPage />} />
